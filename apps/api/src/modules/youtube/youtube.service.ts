@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import https from 'node:https';
 import pg from 'pg';
 import { ImportDriveFolderResult } from '@devcore/shared';
 
@@ -127,6 +128,38 @@ function readText(node: unknown): string {
   return '';
 }
 
+function extractDurationFromLockup(lockup: Record<string, unknown>): number {
+  const contentImage = lockup['contentImage'] as Record<string, unknown> | undefined;
+  const thumbVm = contentImage?.['thumbnailViewModel'] as Record<string, unknown> | undefined;
+  const overlays = Array.isArray(thumbVm?.['overlays']) ? thumbVm['overlays'] : [];
+
+  for (const ov of overlays) {
+    if (!ov || typeof ov !== 'object') continue;
+    const ovRec = ov as Record<string, unknown>;
+
+    const bottomOv = ovRec['thumbnailBottomOverlayViewModel'] as Record<string, unknown> | undefined;
+    const badgeOv = ovRec['thumbnailOverlayBadgeViewModel'] as Record<string, unknown> | undefined;
+
+    const badges = [
+      ...(Array.isArray(bottomOv?.['badges']) ? bottomOv['badges'] : []),
+      ...(Array.isArray(badgeOv?.['thumbnailBadges']) ? badgeOv['thumbnailBadges'] : []),
+    ];
+
+    for (const badge of badges) {
+      if (!badge || typeof badge !== 'object') continue;
+      const tb = (badge as Record<string, unknown>)['thumbnailBadgeViewModel'] as
+        | Record<string, unknown>
+        | undefined;
+      const text = typeof tb?.['text'] === 'string' ? tb['text'] : '';
+      if (text && /^\d+(?::\d{2}){1,2}$/.test(text.trim())) {
+        return parseClockDuration(text);
+      }
+    }
+  }
+
+  return 0;
+}
+
 function extractVideosFromContents(
   contents: unknown[],
 ): { videos: YoutubePlaylistVideoItem[]; continuationToken: string | null } {
@@ -137,6 +170,7 @@ function extractVideosFromContents(
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
 
+    // Formato clássico do YouTube: playlistVideoRenderer
     const videoRenderer = rec['playlistVideoRenderer'] as Record<string, unknown> | undefined;
     if (videoRenderer) {
       const videoId = typeof videoRenderer['videoId'] === 'string' ? videoRenderer['videoId'] : '';
@@ -149,6 +183,41 @@ function extractVideosFromContents(
             ? rawLengthSeconds
             : parseClockDuration(readText(videoRenderer['lengthText']));
 
+        videos.push({
+          videoId,
+          title,
+          durationSeconds,
+          thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        });
+      }
+      continue;
+    }
+
+    // Formato atual do YouTube (2025/2026): lockupViewModel
+    const lockup = rec['lockupViewModel'] as Record<string, unknown> | undefined;
+    if (lockup) {
+      const rendererCtx = lockup['rendererContext'] as Record<string, unknown> | undefined;
+      const cmdCtx = rendererCtx?.['commandContext'] as Record<string, unknown> | undefined;
+      const onTap = cmdCtx?.['onTap'] as Record<string, unknown> | undefined;
+      const innerCmd = onTap?.['innertubeCommand'] as Record<string, unknown> | undefined;
+      const watchEp = innerCmd?.['watchEndpoint'] as Record<string, unknown> | undefined;
+
+      const videoId =
+        (typeof lockup['contentId'] === 'string' && lockup['contentId']) ||
+        (typeof watchEp?.['videoId'] === 'string' && watchEp['videoId']) ||
+        '';
+
+      const metadata = lockup['metadata'] as Record<string, unknown> | undefined;
+      const lockupMeta = metadata?.['lockupMetadataViewModel'] as
+        | Record<string, unknown>
+        | undefined;
+      const titleObj = lockupMeta?.['title'] as Record<string, unknown> | undefined;
+      const title =
+        (typeof titleObj?.['content'] === 'string' ? titleObj['content'].trim() : '') ||
+        readText(titleObj).trim();
+
+      if (videoId && title && title !== '[Deleted video]' && title !== '[Private video]') {
+        const durationSeconds = extractDurationFromLockup(lockup);
         videos.push({
           videoId,
           title,
@@ -177,6 +246,94 @@ export class YoutubeService {
   private readonly logger = new Logger(YoutubeService.name);
 
   constructor(private readonly pgPool: pg.Pool) {}
+
+  /**
+   * Requisição HTTPS robusta com fallback para IPv4 (evita TypeError: fetch failed / timeout IPv6 no Windows).
+   */
+  private httpsRequestIpv4(
+    targetUrl: string,
+    options: {
+      method?: 'GET' | 'POST';
+      headers?: Record<string, string>;
+      body?: string;
+    } = {},
+    redirectsLeft = 5,
+  ): Promise<{ status: number; text: string }> {
+    return new Promise((resolve, reject) => {
+      const parsed = new URL(targetUrl);
+      const req = https.request(
+        {
+          hostname: parsed.hostname,
+          port: parsed.port || 443,
+          path: `${parsed.pathname}${parsed.search}`,
+          method: options.method || 'GET',
+          headers: options.headers,
+          family: 4,
+          timeout: 20_000,
+        },
+        (res) => {
+          const status = res.statusCode || 0;
+          const location = res.headers.location;
+          if (status >= 300 && status < 400 && location && redirectsLeft > 0) {
+            res.resume();
+            const nextUrl = new URL(location, targetUrl).toString();
+            this.httpsRequestIpv4(nextUrl, options, redirectsLeft - 1).then(resolve, reject);
+            return;
+          }
+
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => {
+            resolve({
+              status,
+              text: Buffer.concat(chunks).toString('utf8'),
+            });
+          });
+          res.on('error', reject);
+        },
+      );
+
+      req.on('timeout', () => {
+        req.destroy(new Error('Timeout ao conectar ao YouTube.'));
+      });
+      req.on('error', reject);
+
+      if (options.body) {
+        req.write(options.body);
+      }
+      req.end();
+    });
+  }
+
+  private async httpRequest(
+    targetUrl: string,
+    options: {
+      method?: 'GET' | 'POST';
+      headers?: Record<string, string>;
+      body?: string;
+    } = {},
+  ): Promise<{ ok: boolean; status: number; text: string }> {
+    try {
+      const res = await fetch(targetUrl, {
+        method: options.method || 'GET',
+        headers: options.headers,
+        body: options.body,
+        signal: AbortSignal.timeout(15_000),
+      });
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, text };
+    } catch (fetchErr) {
+      this.logger.warn(
+        `fetch falhou para YouTube (${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}), tentando fallback HTTPS IPv4...`,
+      );
+      const fallback = await this.httpsRequestIpv4(targetUrl, options);
+      return {
+        ok: fallback.status >= 200 && fallback.status < 300,
+        status: fallback.status,
+        text: fallback.text,
+      };
+    }
+  }
 
   private async fetchViaOfficialApi(
     playlistId: string,
@@ -284,14 +441,22 @@ export class YoutubeService {
 
   private async fetchViaPublicPage(playlistId: string): Promise<ParsedYoutubePlaylist> {
     const url = `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}&hl=pt-BR`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-        Cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+667',
-      },
-    });
+    let res: { ok: boolean; status: number; text: string };
+    try {
+      res = await this.httpRequest(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+          Cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+667',
+        },
+      });
+    } catch (err) {
+      this.logger.error('Erro de rede ao buscar playlist do YouTube', err);
+      throw new BadRequestException(
+        `Erro de conexão ao acessar o YouTube (${err instanceof Error ? err.message : 'rede indisponível'}). Tente novamente.`,
+      );
+    }
 
     if (!res.ok) {
       throw new BadRequestException(
@@ -299,7 +464,7 @@ export class YoutubeService {
       );
     }
 
-    const html = await res.text();
+    const html = res.text;
     const initialData =
       extractBalancedJsonObject(html, 'var ytInitialData =') ||
       extractBalancedJsonObject(html, 'window["ytInitialData"] =');
@@ -358,24 +523,32 @@ export class YoutubeService {
     const sectionList = tabContent?.['sectionListRenderer'] as Record<string, unknown> | undefined;
     const sections = Array.isArray(sectionList?.['contents']) ? sectionList['contents'] : [];
 
-    let playlistContents: unknown[] = [];
+    const playlistContents: unknown[] = [];
     for (const sec of sections) {
       if (!sec || typeof sec !== 'object') continue;
-      const itemSec = (sec as Record<string, unknown>)['itemSectionRenderer'] as
-        | Record<string, unknown>
-        | undefined;
+      const secRec = sec as Record<string, unknown>;
+
+      if (secRec['continuationItemRenderer']) {
+        playlistContents.push(secRec);
+        continue;
+      }
+
+      const itemSec = secRec['itemSectionRenderer'] as Record<string, unknown> | undefined;
       const itemContents = Array.isArray(itemSec?.['contents']) ? itemSec['contents'] : [];
       for (const ic of itemContents) {
         if (!ic || typeof ic !== 'object') continue;
-        const pvl = (ic as Record<string, unknown>)['playlistVideoListRenderer'] as
-          | Record<string, unknown>
-          | undefined;
+        const icRec = ic as Record<string, unknown>;
+        const pvl = icRec['playlistVideoListRenderer'] as Record<string, unknown> | undefined;
         if (pvl && Array.isArray(pvl['contents'])) {
-          playlistContents = pvl['contents'];
-          break;
+          playlistContents.push(...pvl['contents']);
+        } else if (
+          icRec['lockupViewModel'] ||
+          icRec['playlistVideoRenderer'] ||
+          icRec['continuationItemRenderer']
+        ) {
+          playlistContents.push(icRec);
         }
       }
-      if (playlistContents.length > 0) break;
     }
 
     const firstPage = extractVideosFromContents(playlistContents);
@@ -389,7 +562,7 @@ export class YoutubeService {
     if (continuationToken && innertubeKey) {
       for (let page = 0; page < 10 && continuationToken; page++) {
         try {
-          const contRes = await fetch(
+          const contRes = await this.httpRequest(
             `https://www.youtube.com/youtubei/v1/browse?key=${encodeURIComponent(innertubeKey)}`,
             {
               method: 'POST',
@@ -412,7 +585,7 @@ export class YoutubeService {
             },
           );
           if (!contRes.ok) break;
-          const contJson = (await contRes.json()) as {
+          const contJson = JSON.parse(contRes.text) as {
             onResponseReceivedActions?: Array<{
               appendContinuationItemsAction?: { continuationItems?: unknown[] };
             }>;

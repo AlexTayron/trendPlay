@@ -1,0 +1,15 @@
+node_modules
+.git
+.next
+dist
+build
+.env
+.env.*
+!.env.example
+!.env.prod.example
+client.txt
+*.zip
+files_extracted
+zip_extracted
+*.log
+*.tsbuildinfo

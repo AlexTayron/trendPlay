@@ -158,6 +158,7 @@ function CoursePlayerContent() {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [playbackRate, setPlaybackRate] = useState(1);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [theaterMode, setTheaterMode] = useState(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -191,10 +192,44 @@ function CoursePlayerContent() {
       if (saved === '1') {
         setAutoPlay(true);
       }
+      const savedTheater = window.localStorage.getItem('devcore_theater_mode');
+      if (savedTheater === '1') {
+        setTheaterMode(true);
+      }
     } catch {
       // ignora
     }
   }, []);
+
+  const toggleTheaterMode = useCallback(() => {
+    setTheaterMode((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem('devcore_theater_mode', next ? '1' : '0');
+      } catch {
+        // ignora
+      }
+      return next;
+    });
+  }, []);
+
+  // Atalho de teclado "T" para alternar Modo Teatro (estilo YouTube)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        return;
+      }
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        toggleTheaterMode();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleTheaterMode]);
 
   const toggleAutoPlay = () => {
     setAutoPlay((prev) => {
@@ -728,6 +763,23 @@ function CoursePlayerContent() {
           )}
 
           <button
+            onClick={toggleTheaterMode}
+            title={theaterMode ? 'Mostrar lista de aulas (Tecla T)' : 'Modo teatro: recolher lista de aulas (Tecla T)'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              theaterMode
+                ? 'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25'
+                : 'bg-surface-container hover:bg-surface-container-high border-outline-variant/30 text-on-surface-variant'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {theaterMode ? 'right_panel_open' : 'width_wide'}
+            </span>
+            <span className="hidden md:inline">
+              {theaterMode ? 'Mostrar aulas' : 'Teatro'}
+            </span>
+          </button>
+
+          <button
             onClick={handleSyncCourse}
             disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs text-on-surface transition-colors disabled:opacity-50"
@@ -768,9 +820,15 @@ function CoursePlayerContent() {
       )}
 
       {/* Workspace Principal: Player (Esquerda) + Grade de Módulos/Aulas (Direita) */}
-      <div className="flex-1 w-full max-w-[1700px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div
+        className={`flex-1 w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 transition-all ${
+          theaterMode ? 'max-w-[1920px]' : 'max-w-[1700px]'
+        }`}
+      >
         {/* Área do Player + Materiais + Notas */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
+        <div
+          className={`${theaterMode ? 'lg:col-span-12' : 'lg:col-span-8'} flex flex-col gap-6 transition-all`}
+        >
           {!activeLesson ? (
             <div className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low p-10 text-center">
               <span className="material-symbols-outlined text-5xl text-primary mb-3">
@@ -812,6 +870,11 @@ function CoursePlayerContent() {
                     }
                     playbackRate={playbackRate}
                     autoStart={ytAutoStart}
+                    className={
+                      theaterMode
+                        ? 'w-full h-[76vh] max-h-[820px] bg-black'
+                        : 'w-full aspect-video bg-black'
+                    }
                     onReady={handleYoutubeReady}
                     onTimeUpdate={handleYoutubeTimeUpdate}
                     onPause={handleYoutubePause}
@@ -829,7 +892,11 @@ function CoursePlayerContent() {
                     onTimeUpdate={handleVideoTimeUpdate}
                     onPause={() => handleVideoPauseOrEnd(false)}
                     onEnded={() => handleVideoPauseOrEnd(true)}
-                    className="w-full aspect-video bg-black"
+                    className={
+                      theaterMode
+                        ? 'w-full max-h-[78vh] aspect-video bg-black mx-auto'
+                        : 'w-full aspect-video bg-black'
+                    }
                   />
                 ) : activeLesson.driveFileId && isAudioLesson(activeLesson) ? (
                   <div className="p-10 flex flex-col items-center justify-center bg-surface-container-lowest gap-4">
@@ -986,6 +1053,26 @@ function CoursePlayerContent() {
                         <span>Autoplay</span>
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={toggleTheaterMode}
+                      title={
+                        theaterMode
+                          ? 'Sair do modo teatro e mostrar aulas (Tecla T)'
+                          : 'Modo teatro: expandir vídeo e recolher próximos títulos (Tecla T)'
+                      }
+                      className={`ml-1 px-2.5 py-1 rounded-md text-xs font-medium border flex items-center gap-1.5 transition-all ${
+                        theaterMode
+                          ? 'bg-primary/15 text-primary border-primary/40'
+                          : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant border-outline-variant/25'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">
+                        {theaterMode ? 'right_panel_open' : 'width_wide'}
+                      </span>
+                      <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
+                    </button>
 
                     {isYoutubeLesson(activeLesson) && getYoutubeVideoId(activeLesson) ? (
                       <a
@@ -1154,20 +1241,33 @@ function CoursePlayerContent() {
           )}
         </div>
 
-        {/* Sidebar de Conteúdo (Módulos e Aulas) */}
-        <aside className="lg:col-span-4">
-          <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden sticky top-20">
-            <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-on-surface">Conteúdo do Curso</h2>
-                <p className="text-[11px] text-outline font-mono mt-0.5">
-                  {course.modulesCount} módulos · {course.lessonsCount} aulas
-                </p>
+        {/* Sidebar de Conteúdo (Módulos e Aulas) — recolhida no Modo Teatro */}
+        {!theaterMode && (
+          <aside className="lg:col-span-4">
+            <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden sticky top-20">
+              <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-on-surface">Conteúdo do Curso</h2>
+                  <p className="text-[11px] text-outline font-mono mt-0.5">
+                    {course.modulesCount} módulos · {course.lessonsCount} aulas
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-primary">
+                    {course.progressPercent}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleTheaterMode}
+                    title="Recolher lista (Modo Teatro · Tecla T)"
+                    className="p-1 rounded-md text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      right_panel_close
+                    </span>
+                  </button>
+                </div>
               </div>
-              <span className="text-xs font-mono font-bold text-primary">
-                {course.progressPercent}%
-              </span>
-            </div>
 
             <div className="max-h-[calc(100vh-180px)] overflow-y-auto divide-y divide-outline-variant/15">
               {course.modules.map((mod) => {
@@ -1266,6 +1366,7 @@ function CoursePlayerContent() {
             </div>
           </div>
         </aside>
+        )}
       </div>
 
       <DriveFileBrowserModal

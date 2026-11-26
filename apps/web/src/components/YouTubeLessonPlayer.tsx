@@ -100,6 +100,7 @@ interface YouTubeLessonPlayerProps {
   initialPositionSeconds?: number;
   playbackRate: number;
   autoStart?: boolean;
+  className?: string;
   onReady?: (durationSeconds: number) => void;
   onTimeUpdate?: (currentSeconds: number, durationSeconds: number) => void;
   onPause?: (currentSeconds: number, durationSeconds: number) => void;
@@ -113,6 +114,7 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
       initialPositionSeconds = 0,
       playbackRate,
       autoStart = false,
+      className = 'w-full aspect-video bg-black',
       onReady,
       onTimeUpdate,
       onPause,
@@ -281,6 +283,6 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoId]);
 
-    return <div ref={hostRef} className="w-full aspect-video bg-black" />;
+    return <div ref={hostRef} className={className} />;
   },
 );
