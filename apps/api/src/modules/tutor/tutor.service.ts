@@ -28,12 +28,10 @@ interface CourseContextBundle {
   courseTitle: string;
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
 const FALLBACK_GEMINI_MODELS = [
   'gemini-flash-latest',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-flash-lite-latest',
 ];
 
 function formatClock(seconds: number): string {
@@ -800,7 +798,10 @@ export class TutorService {
     // 1. Tenta o modelo preferido / cacheado primeiro
     const initialList = Array.from(new Set([preferredModel, ...FALLBACK_GEMINI_MODELS]));
     let lastErrorMessage = 'Falha ao consultar a API do Google Gemini.';
-    let allNotFound = true;
+    let shouldDiscoverFallback = true;
+
+    const isRetryableAcrossModels = (status: number) =>
+      status === 404 || status === 429 || status === 503;
 
     for (const model of initialList) {
       const attempt = await tryModel(model);
@@ -809,17 +810,17 @@ export class TutorService {
         return { text: attempt.text, modelUsed: model };
       }
       lastErrorMessage = `Erro no Gemini (${model}): ${attempt.errMsg}`;
-      if (attempt.status === 404) {
-        this.logger.warn(`Modelo Gemini ${model} retornou 404: ${attempt.errMsg}`);
+      if (isRetryableAcrossModels(attempt.status)) {
+        this.logger.warn(`Modelo Gemini ${model} retornou ${attempt.status}: ${attempt.errMsg}`);
         continue;
       }
-      allNotFound = false;
+      shouldDiscoverFallback = false;
       this.logger.error(lastErrorMessage);
       break;
     }
 
-    // 2. Se os modelos padrão deram 404, descobre dinamicamente os modelos ativos na chave!
-    if (allNotFound) {
+    // 2. Se os modelos padrão deram 404/429/503, descobre dinamicamente os modelos ativos na chave!
+    if (shouldDiscoverFallback) {
       const discovered = await this.discoverGeminiModels(apiKey);
       if (discovered.error) {
         throw new ServiceUnavailableException(
@@ -827,7 +828,7 @@ export class TutorService {
         );
       }
 
-      const extraModels = discovered.models.filter((m) => !initialList.includes(m)).slice(0, 4);
+      const extraModels = discovered.models.filter((m) => !initialList.includes(m)).slice(0, 6);
       for (const model of extraModels) {
         const attempt = await tryModel(model);
         if (attempt.ok) {
@@ -835,10 +836,11 @@ export class TutorService {
           return { text: attempt.text, modelUsed: model };
         }
         lastErrorMessage = `Erro no Gemini (${model}): ${attempt.errMsg}`;
-        if (attempt.status !== 404) {
+        if (!isRetryableAcrossModels(attempt.status)) {
           this.logger.error(lastErrorMessage);
           break;
         }
+        this.logger.warn(`Fallback Gemini ${model} retornou ${attempt.status}: ${attempt.errMsg}`);
       }
     }
 

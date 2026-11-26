@@ -52,7 +52,7 @@ services:
       GOOGLE_DRIVE_SCOPE: ${GOOGLE_DRIVE_SCOPE:-https://www.googleapis.com/auth/drive.readonly}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
       ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?Defina ENCRYPTION_MASTER_KEY no .env.prod}
       JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env.prod}
     ports:
