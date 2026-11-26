@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: devcore-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: devcore
+      POSTGRES_USER: devcore_admin
+      POSTGRES_PASSWORD: devcore_secure_password_dev
+    ports:
+      - "${DEVCORE_DB_PORT:-5433}:5432"
+    volumes:
+      - devcore_pgdata:/var/lib/postgresql/data
+      - ./packages/database/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devcore_admin -d devcore"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  devcore_pgdata:
+    driver: local
+

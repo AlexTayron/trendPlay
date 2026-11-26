@@ -1,0 +1,22 @@
+{
+  "name": "@devcore/worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@devcore/database": "*",
+    "@devcore/shared": "*",
+    "pg": "^8.13.1",
+    "pg-boss": "^10.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2"
+  }
+}
+

@@ -1,0 +1,26 @@
+{
+  "name": "devcore",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DevCore — Plataforma de Engenharia de Software e Aprendizagem Ativa com RAG Pessoal",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspace=@devcore/shared build && npm run --workspace=@devcore/database build && npm run --workspace=@devcore/api build && npm run --workspace=@devcore/worker build && npm run --workspace=@devcore/web build",
+    "dev": "npm run --workspaces --parallel --if-present dev",
+    "lint": "npm run --workspaces --if-present lint",
+    "test": "npm run --workspaces --if-present test",
+    "db:generate": "npm run --workspace=@devcore/database db:generate",
+    "db:migrate": "npm run --workspace=@devcore/database db:migrate",
+    "db:studio": "npm run --workspace=@devcore/database db:studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+
