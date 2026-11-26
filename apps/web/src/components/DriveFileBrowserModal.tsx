@@ -191,17 +191,17 @@ export function DriveFileBrowserModal({
         </div>
 
         {/* Breadcrumbs */}
-        <div className="px-6 py-2.5 border-b border-outline-variant/20 bg-surface-container-lowest flex items-center gap-1 flex-wrap text-xs">
+        <div className="px-3.5 sm:px-6 py-2.5 border-b border-outline-variant/20 bg-surface-container-lowest flex items-center gap-1 flex-wrap text-xs">
           {crumbs.map((c, idx) => (
             <div key={`${c.id}-${idx}`} className="flex items-center gap-1">
               {idx > 0 && (
-                <span className="material-symbols-outlined text-[16px] text-outline">
+                <span className="material-symbols-outlined text-[15px] text-outline">
                   chevron_right
                 </span>
               )}
               <button
                 onClick={() => handleBreadcrumbClick(idx)}
-                className={`px-2 py-1 rounded-md transition-colors ${
+                className={`px-2 py-1 rounded-md transition-colors max-w-[200px] sm:max-w-none truncate ${
                   idx === crumbs.length - 1
                     ? 'bg-primary/15 text-primary font-semibold'
                     : 'text-on-surface-variant hover:bg-surface-container-high'
@@ -214,9 +214,11 @@ export function DriveFileBrowserModal({
         </div>
 
         {/* Filtro + Nome do módulo de destino */}
-        <div className="px-6 py-3 border-b border-outline-variant/15 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-3 py-1.5">
-            <span className="material-symbols-outlined text-[18px] text-outline">search</span>
+        <div className="px-3.5 sm:px-6 py-2.5 sm:py-3 border-b border-outline-variant/15 grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-3 py-2 sm:py-1.5">
+            <span className="material-symbols-outlined text-[18px] text-outline shrink-0">
+              search
+            </span>
             <input
               type="text"
               value={filter}
@@ -231,18 +233,18 @@ export function DriveFileBrowserModal({
             value={moduleTitle}
             onChange={(e) => setModuleTitle(e.target.value)}
             placeholder={`Módulo destino (padrão: ${currentCrumb.name})`}
-            className="bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-3 py-1.5 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary"
+            className="bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-3 py-2 sm:py-1.5 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary"
           />
         </div>
 
         {error && (
-          <div className="mx-6 mt-3 p-3 rounded-lg bg-error/10 border border-error/30 text-error text-xs">
+          <div className="mx-3.5 sm:mx-6 mt-3 p-3 rounded-lg bg-error/10 border border-error/30 text-error text-xs">
             {error}
           </div>
         )}
 
         {/* Lista hierárquica de pastas e arquivos */}
-        <div className="flex-1 overflow-y-auto px-6 py-3 min-h-[280px] space-y-3">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 min-h-[280px] space-y-3">
           {loading ? (
             <div className="h-52 flex flex-col items-center justify-center gap-2 text-outline">
               <span className="material-symbols-outlined text-3xl text-primary animate-spin">
@@ -263,13 +265,13 @@ export function DriveFileBrowserModal({
                       <button
                         key={folder.id}
                         onClick={() => handleOpenFolder(folder)}
-                        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-surface-container-low hover:bg-surface-container text-left transition-colors group"
+                        className="w-full flex items-center justify-between gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 sm:py-2.5 bg-surface-container-low hover:bg-surface-container text-left transition-colors group"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="material-symbols-outlined text-amber-300/90 text-[20px] shrink-0">
+                        <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                          <span className="material-symbols-outlined text-amber-300/90 text-[20px] shrink-0 mt-0.5 sm:mt-0">
                             folder
                           </span>
-                          <span className="text-sm font-medium text-on-surface group-hover:text-primary truncate">
+                          <span className="text-[13px] sm:text-sm font-medium text-on-surface group-hover:text-primary leading-snug break-words line-clamp-2">
                             {folder.name}
                           </span>
                         </div>
@@ -285,7 +287,7 @@ export function DriveFileBrowserModal({
               {/* Arquivos selecionáveis */}
               {filteredFiles.length > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="text-[11px] font-mono uppercase tracking-wider text-outline">
                       Arquivos ({filteredFiles.length})
                     </span>
@@ -293,7 +295,7 @@ export function DriveFileBrowserModal({
                       onClick={toggleSelectAllVisible}
                       className="text-xs text-secondary hover:underline font-medium"
                     >
-                      {allVisibleSelected ? 'Desmarcar todos' : 'Selecionar todos desta pasta'}
+                      {allVisibleSelected ? 'Desmarcar todos' : 'Selecionar todos'}
                     </button>
                   </div>
                   <div className="divide-y divide-outline-variant/15 border border-outline-variant/20 rounded-xl overflow-hidden">
@@ -301,38 +303,55 @@ export function DriveFileBrowserModal({
                       const checked = selectedMap.has(file.id);
                       const isVideo = file.mimeType.startsWith('video/');
                       const isAudio = file.mimeType.startsWith('audio/');
+                      const isImage = file.mimeType.startsWith('image/');
                       return (
                         <label
                           key={file.id}
-                          className={`flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                          className={`flex items-start sm:items-center justify-between gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 cursor-pointer transition-colors ${
                             checked
                               ? 'bg-primary/15'
                               : 'bg-surface-container-low hover:bg-surface-container'
                           }`}
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleFile(file)}
-                              className="w-4 h-4 rounded accent-primary-container shrink-0"
+                              className="w-4 h-4 rounded accent-primary-container shrink-0 mt-0.5 sm:mt-0"
                             />
                             <span
-                              className={`material-symbols-outlined text-[20px] shrink-0 ${
+                              className={`material-symbols-outlined text-[20px] shrink-0 mt-0.5 sm:mt-0 ${
                                 isVideo
                                   ? 'text-secondary'
                                   : isAudio
                                     ? 'text-tertiary'
-                                    : 'text-primary'
+                                    : isImage
+                                      ? 'text-emerald-400'
+                                      : 'text-primary'
                               }`}
                             >
-                              {isVideo ? 'movie' : isAudio ? 'headphones' : 'description'}
+                              {isVideo
+                                ? 'movie'
+                                : isAudio
+                                  ? 'headphones'
+                                  : isImage
+                                    ? 'image'
+                                    : 'description'}
                             </span>
-                            <span className="text-xs sm:text-sm text-on-surface truncate">
-                              {file.name}
-                            </span>
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-[13px] sm:text-sm text-on-surface leading-snug break-words line-clamp-2">
+                                {file.name}
+                              </span>
+                              <div className="sm:hidden flex items-center gap-2 text-[10px] font-mono text-outline mt-0.5">
+                                {file.durationSeconds > 0 && (
+                                  <span>{formatDurationClock(file.durationSeconds)}</span>
+                                )}
+                                <span>{formatBytes(file.size)}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-[11px] font-mono text-outline shrink-0">
+                          <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-outline shrink-0">
                             {file.durationSeconds > 0 && (
                               <span>{formatDurationClock(file.durationSeconds)}</span>
                             )}
@@ -360,7 +379,7 @@ export function DriveFileBrowserModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-outline-variant/20 bg-surface-container flex flex-wrap items-center justify-between gap-3">
+        <div className="px-3.5 sm:px-6 py-3 border-t border-outline-variant/20 bg-surface-container flex flex-wrap items-center justify-between gap-2.5">
           <button
             onClick={() => {
               onClose();
@@ -369,20 +388,21 @@ export function DriveFileBrowserModal({
             className="text-xs text-outline hover:text-on-surface flex items-center gap-1.5"
           >
             <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-            <span>Abrir Google Picker nativo</span>
+            <span className="sm:hidden">Google Picker</span>
+            <span className="hidden sm:inline">Abrir Google Picker nativo</span>
           </button>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-surface-container-high text-xs text-on-surface-variant hover:text-on-surface"
+              className="px-3.5 sm:px-4 py-2 rounded-lg bg-surface-container-high text-xs text-on-surface-variant hover:text-on-surface"
             >
               Cancelar
             </button>
             <button
               disabled={selectedMap.size === 0 || submitting}
               onClick={handleSubmit}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-container hover:bg-secondary-container text-on-primary-container font-bold text-xs transition-all disabled:opacity-45"
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-lg bg-primary-container hover:bg-secondary-container text-on-primary-container font-bold text-xs transition-all disabled:opacity-45"
             >
               <span
                 className={`material-symbols-outlined text-[16px] ${
@@ -394,7 +414,7 @@ export function DriveFileBrowserModal({
               <span>
                 {submitting
                   ? 'Adicionando...'
-                  : `Adicionar selecionados (${selectedMap.size})`}
+                  : `Adicionar (${selectedMap.size})`}
               </span>
             </button>
           </div>
