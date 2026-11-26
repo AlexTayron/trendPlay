@@ -9,6 +9,9 @@ import type {
   ImportRootFolderResult,
   LessonNote,
   PickerTokenResponse,
+  TutorChatResponse,
+  TutorHistoryResponse,
+  TutorStatusResponse,
 } from '@devcore/shared';
 
 export const API_BASE_URL =
@@ -208,5 +211,41 @@ export function updateLessonProgress(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export function getTutorStatus(): Promise<TutorStatusResponse> {
+  return apiFetch<TutorStatusResponse>('/tutor/status');
+}
+
+export function getTutorHistory(
+  courseId: string,
+  lessonId?: string,
+): Promise<TutorHistoryResponse> {
+  const qs = lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : '';
+  return apiFetch<TutorHistoryResponse>(
+    `/tutor/courses/${encodeURIComponent(courseId)}/history${qs}`,
+  );
+}
+
+export function sendTutorMessage(
+  courseId: string,
+  payload: { lessonId?: string; message: string; currentTimeSeconds?: number },
+): Promise<TutorChatResponse> {
+  return apiFetch<TutorChatResponse>(
+    `/tutor/courses/${encodeURIComponent(courseId)}/chat`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function clearTutorConversation(
+  conversationId: string,
+): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(
+    `/tutor/conversations/${encodeURIComponent(conversationId)}`,
+    { method: 'DELETE' },
   );
 }

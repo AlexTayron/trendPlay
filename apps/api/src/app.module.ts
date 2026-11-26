@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { DriveModule } from './modules/drive/drive.module.js';
 import { YoutubeModule } from './modules/youtube/youtube.module.js';
+import { TutorModule } from './modules/tutor/tutor.module.js';
 import { RagModule } from './modules/rag/rag.module.js';
 import { LearningModule } from './modules/learning/learning.module.js';
 
@@ -30,6 +31,7 @@ import { LearningModule } from './modules/learning/learning.module.js';
     AuthModule,
     DriveModule,
     YoutubeModule,
+    TutorModule,
     RagModule,
     LearningModule,
   ],

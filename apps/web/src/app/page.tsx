@@ -224,14 +224,14 @@ export default function DashboardPage() {
   const greetingText = useMemo(() => getGreetingPtBr(), []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface font-sans">
+    <div className="min-h-screen flex flex-col bg-surface font-sans overflow-x-hidden">
       {/* Header Fixo */}
       <header className="fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-outline-variant/20 shadow-lg">
-        <div className="h-16 w-full max-w-[1600px] mx-auto px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[28px]">terminal</span>
-              <span className="text-xl font-bold tracking-tight text-on-surface">DevCore</span>
+        <div className="h-14 sm:h-16 w-full max-w-[1600px] mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+            <Link href="/" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <span className="material-symbols-outlined text-primary text-[24px] sm:text-[28px]">terminal</span>
+              <span className="text-lg sm:text-xl font-bold tracking-tight text-on-surface">DevCore</span>
             </Link>
             <nav className="hidden md:flex items-center gap-4 h-16">
               <Link
@@ -243,24 +243,24 @@ export default function DashboardPage() {
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {dashboard && (
-              <div className="relative hidden sm:flex items-center bg-surface-container-low px-3 py-1.5 rounded-lg w-64 border border-outline-variant/30 text-outline focus-within:border-primary/60">
+              <div className="relative hidden sm:flex items-center bg-surface-container-low px-3 py-1.5 rounded-lg w-48 md:w-64 border border-outline-variant/30 text-outline focus-within:border-primary/60">
                 <span className="material-symbols-outlined text-[18px] mr-2">search</span>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filtrar cursos do Drive..."
+                  placeholder="Filtrar cursos..."
                   className="bg-transparent text-xs text-on-surface placeholder:text-outline focus:outline-none w-full"
                 />
               </div>
             )}
 
             {dashboard ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <div
-                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                  className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
                     dashboard.drive.connected
                       ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
                       : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
@@ -274,15 +274,15 @@ export default function DashboardPage() {
                   <span>{dashboard.drive.connected ? 'Drive Conectado' : 'Drive Desconectado'}</span>
                 </div>
 
-                <div className="flex items-center gap-2 pl-2 border-l border-outline-variant/30">
+                <div className="flex items-center gap-1.5 sm:gap-2 pl-2 border-l border-outline-variant/30">
                   {dashboard.user.avatarUrl ? (
                     <img
                       src={dashboard.user.avatarUrl}
                       alt={dashboard.user.fullName}
-                      className="w-8 h-8 rounded-full ring-1 ring-primary/40 object-cover"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-primary/40 object-cover"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-primary/20 ring-1 ring-primary/40 flex items-center justify-center text-primary font-bold text-xs">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/20 ring-1 ring-primary/40 flex items-center justify-center text-primary font-bold text-xs">
                       {getInitials(dashboard.user.fullName)}
                     </div>
                   )}
@@ -295,7 +295,7 @@ export default function DashboardPage() {
                   <button
                     onClick={handleLogout}
                     title="Sair"
-                    className="ml-1 p-1.5 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                    className="p-1.5 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">logout</span>
                   </button>
@@ -304,10 +304,11 @@ export default function DashboardPage() {
             ) : (
               <a
                 href={getGoogleAuthUrl()}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-xs transition-all"
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-xs transition-all"
               >
                 <span className="material-symbols-outlined text-[18px]">cloud_sync</span>
-                <span>Conectar Google Drive</span>
+                <span className="hidden sm:inline">Conectar Google Drive</span>
+                <span className="sm:hidden">Entrar</span>
               </a>
             )}
           </div>
@@ -315,7 +316,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Conteúdo Principal */}
-      <main className="w-full max-w-[1600px] mx-auto px-6 pt-20 pb-16 flex-1">
+      <main className="w-full max-w-[1600px] mx-auto px-3 sm:px-6 pt-16 sm:pt-20 pb-12 sm:pb-16 flex-1">
         {/* Alertas / Feedback */}
         {banner && (
           <div
@@ -358,15 +359,15 @@ export default function DashboardPage() {
 
         {/* Estado Não Autenticado */}
         {!loading && unauthenticated && (
-          <section className="mt-8">
-            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#070d18] via-[#0c1626] to-[#0a1220] border border-outline-variant/20 shadow-2xl p-8 md:p-12">
+          <section className="mt-4 sm:mt-8">
+            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#070d18] via-[#0c1626] to-[#0a1220] border border-outline-variant/20 shadow-2xl p-5 sm:p-8 md:p-12">
               <div className="max-w-3xl">
-                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/15 text-secondary text-xs font-mono font-semibold uppercase tracking-wider mb-4">
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/15 text-secondary text-[11px] sm:text-xs font-mono font-semibold uppercase tracking-wider mb-4">
                   <span className="material-symbols-outlined text-[16px]">folder_open</span>
-                  MODELO B · ACERVO PESSOAL NO GOOGLE DRIVE
+                  ACERVO PESSOAL · GOOGLE DRIVE &amp; YOUTUBE
                 </span>
-                <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
-                  Seus cursos do Google Drive, organizados em uma plataforma de estudo.
+                <h1 className="text-2xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
+                  Seus cursos do Google Drive e YouTube em uma plataforma de estudo.
                 </h1>
                 <p className="text-slate-300 mt-4 text-base leading-relaxed">
                   Conecte sua conta Google, selecione as pastas dos seus cursos usando o Google
@@ -472,43 +473,43 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Cabeçalho do Hero */}
-                <div className="relative z-10 px-8 pt-8 pb-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-                  <div>
-                    <div className="text-[11px] font-mono text-slate-400 uppercase tracking-widest mb-1 font-semibold">
+                <div className="relative z-10 px-4 pt-5 pb-4 sm:px-8 sm:pt-8 sm:pb-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-[10px] sm:text-[11px] font-mono text-slate-400 uppercase tracking-widest mb-1 font-semibold">
                       {greetingDate}
                     </div>
-                    <h1 className="text-3xl sm:text-4xl text-white font-extrabold tracking-tight">
+                    <h1 className="text-2xl sm:text-4xl text-white font-extrabold tracking-tight">
                       {greetingText}, {getFirstName(dashboard.user.fullName)}.
                     </h1>
-                    <p className="text-sm text-slate-300 mt-1 font-normal">
+                    <p className="text-xs sm:text-sm text-slate-300 mt-1 font-normal">
                       {dashboard.courses.length > 0
-                        ? 'Continue de onde parou ou importe novas pastas de cursos do seu Google Drive.'
-                        : 'Conecte e importe sua primeira pasta de curso do Google Drive para começar.'}
+                        ? 'Continue de onde parou ou importe novos cursos do Drive e YouTube.'
+                        : 'Importe sua primeira pasta de curso do Drive ou playlist do YouTube para começar.'}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0 flex-wrap">
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#182334]/85 border border-slate-700/60 text-sm shadow-inner backdrop-blur-md">
-                      <span className="text-sky-400 text-[16px] leading-none select-none">🔥</span>
-                      <span className="text-white text-xs sm:text-sm font-medium tracking-tight">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap">
+                    <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#182334]/85 border border-slate-700/60 text-xs sm:text-sm shadow-inner backdrop-blur-md">
+                      <span className="text-sky-400 text-[15px] leading-none select-none">🔥</span>
+                      <span className="text-white font-medium tracking-tight">
                         {dashboard.stats.streakDays}{' '}
-                        {dashboard.stats.streakDays === 1 ? 'dia seguido' : 'dias seguidos'} estudando
+                        {dashboard.stats.streakDays === 1 ? 'dia seguido' : 'dias seguidos'}
                       </span>
                     </div>
 
                     <button
                       onClick={() => setYtModalOpen(true)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/35 font-semibold text-xs sm:text-sm transition-all"
+                      className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/35 font-semibold text-xs sm:text-sm transition-all"
                     >
                       <span className="material-symbols-outlined text-[18px]">smart_display</span>
-                      <span>Playlist YouTube</span>
+                      <span>YouTube</span>
                     </button>
 
                     {dashboard.drive.connected ? (
                       <button
                         onClick={() => setBrowserOpen(true)}
                         disabled={importing}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-bold text-xs sm:text-sm transition-all shadow-md disabled:opacity-60"
+                        className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-bold text-xs sm:text-sm transition-all shadow-md disabled:opacity-60"
                       >
                         <span
                           className={`material-symbols-outlined text-[18px] ${
@@ -518,71 +519,71 @@ export default function DashboardPage() {
                           {importing ? 'progress_activity' : 'add_to_drive'}
                         </span>
                         <span>
-                          {importing ? 'Importando do Drive...' : 'Explorar pastas do Drive'}
+                          {importing ? 'Importando...' : 'Pastas do Drive'}
                         </span>
                       </button>
                     ) : (
                       <a
                         href={getGoogleAuthUrl()}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm transition-all shadow-md"
+                        className="flex-1 sm:flex-none justify-center flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm transition-all shadow-md"
                       >
                         <span className="material-symbols-outlined text-[18px]">cloud_sync</span>
-                        <span>Reconectar Google Drive</span>
+                        <span>Reconectar Drive</span>
                       </a>
                     )}
                   </div>
                 </div>
 
                 {/* Grid dos 4 Stat Cards com Métricas Reais */}
-                <div className="relative z-10 px-8 pb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="relative rounded-2xl overflow-hidden p-5 flex flex-col justify-between bg-[#82BAFA] shadow-md min-h-[110px]">
-                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[88px] text-black/[0.08] select-none pointer-events-none">
+                <div className="relative z-10 px-4 pb-5 sm:px-8 sm:pb-8 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="relative rounded-xl sm:rounded-2xl overflow-hidden p-3.5 sm:p-5 flex flex-col justify-between bg-[#82BAFA] shadow-md min-h-[90px] sm:min-h-[110px]">
+                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[64px] sm:text-[88px] text-black/[0.08] select-none pointer-events-none">
                       checklist
                     </span>
-                    <span className="text-[13px] font-semibold text-[#1E293B]">
-                      Cursos em progresso
+                    <span className="text-[11px] sm:text-[13px] font-semibold text-[#1E293B]">
+                      Em progresso
                     </span>
-                    <span className="text-4xl font-extrabold leading-none text-[#0F172A] mt-2">
+                    <span className="text-2xl sm:text-4xl font-extrabold leading-none text-[#0F172A] mt-2">
                       {dashboard.stats.coursesInProgress}
                     </span>
                   </div>
 
-                  <div className="relative rounded-2xl overflow-hidden p-5 flex flex-col justify-between bg-[#B2E59C] shadow-md min-h-[110px]">
-                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[88px] text-black/[0.08] select-none pointer-events-none">
+                  <div className="relative rounded-xl sm:rounded-2xl overflow-hidden p-3.5 sm:p-5 flex flex-col justify-between bg-[#B2E59C] shadow-md min-h-[90px] sm:min-h-[110px]">
+                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[64px] sm:text-[88px] text-black/[0.08] select-none pointer-events-none">
                       emoji_events
                     </span>
-                    <span className="text-[13px] font-semibold text-[#1E293B]">
-                      Cursos concluídos
+                    <span className="text-[11px] sm:text-[13px] font-semibold text-[#1E293B]">
+                      Concluídos
                     </span>
-                    <span className="text-4xl font-extrabold leading-none text-[#0F172A] mt-2">
+                    <span className="text-2xl sm:text-4xl font-extrabold leading-none text-[#0F172A] mt-2">
                       {dashboard.stats.coursesCompleted}
                     </span>
                   </div>
 
-                  <div className="relative rounded-2xl overflow-hidden p-5 flex flex-col justify-between bg-[#FFBA7A] shadow-md min-h-[110px]">
-                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[88px] text-black/[0.08] select-none pointer-events-none">
+                  <div className="relative rounded-xl sm:rounded-2xl overflow-hidden p-3.5 sm:p-5 flex flex-col justify-between bg-[#FFBA7A] shadow-md min-h-[90px] sm:min-h-[110px]">
+                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[64px] sm:text-[88px] text-black/[0.08] select-none pointer-events-none">
                       hourglass_empty
                     </span>
-                    <span className="text-[13px] font-semibold text-[#1E293B]">
+                    <span className="text-[11px] sm:text-[13px] font-semibold text-[#1E293B]">
                       Tempo assistido
                     </span>
-                    <span className="text-3xl sm:text-4xl font-extrabold leading-none text-[#0F172A] mt-2">
+                    <span className="text-xl sm:text-4xl font-extrabold leading-none text-[#0F172A] mt-2">
                       {formatWatchTime(dashboard.stats.totalWatchedSeconds)}
                     </span>
                   </div>
 
-                  <div className="relative rounded-2xl overflow-hidden p-5 flex flex-col justify-between bg-[#CCA7F8] shadow-md min-h-[110px]">
-                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[88px] text-black/[0.08] select-none pointer-events-none">
+                  <div className="relative rounded-xl sm:rounded-2xl overflow-hidden p-3.5 sm:p-5 flex flex-col justify-between bg-[#CCA7F8] shadow-md min-h-[90px] sm:min-h-[110px]">
+                    <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-[64px] sm:text-[88px] text-black/[0.08] select-none pointer-events-none">
                       pie_chart
                     </span>
-                    <span className="text-[13px] font-semibold text-[#1E293B]">
+                    <span className="text-[11px] sm:text-[13px] font-semibold text-[#1E293B]">
                       Conclusão geral
                     </span>
-                    <div className="flex items-center gap-3 mt-2">
-                      <span className="text-4xl font-extrabold leading-none text-[#0F172A]">
+                    <div className="flex items-center gap-2 sm:gap-3 mt-2">
+                      <span className="text-2xl sm:text-4xl font-extrabold leading-none text-[#0F172A]">
                         {dashboard.stats.overallCompletionPercent}%
                       </span>
-                      <div className="flex-1 max-w-[120px] h-2.5 rounded-full bg-black/10 overflow-hidden relative">
+                      <div className="flex-1 max-w-[120px] h-2 sm:h-2.5 rounded-full bg-black/10 overflow-hidden relative">
                         <div
                           className="h-full bg-white/90 rounded-full transition-all duration-500"
                           style={{ width: `${dashboard.stats.overallCompletionPercent}%` }}
@@ -596,17 +597,17 @@ export default function DashboardPage() {
 
             {/* Continuar Estudando (somente dados reais) */}
             {dashboard.continueWatching && (
-              <section className="w-full mb-8">
-                <div className="p-6 bg-surface-container-low rounded-2xl border border-secondary/20 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-                  <div className="flex-1 max-w-3xl">
+              <section className="w-full mb-6 sm:mb-8">
+                <div className="p-4 sm:p-6 bg-surface-container-low rounded-2xl border border-secondary/20 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
+                  <div className="flex-1 max-w-3xl min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded bg-secondary/15 text-secondary text-xs font-mono font-semibold uppercase tracking-wider">
+                      <span className="px-2 py-0.5 rounded bg-secondary/15 text-secondary text-[11px] sm:text-xs font-mono font-semibold uppercase tracking-wider">
                         CONTINUAR ESTUDANDO
                       </span>
                       {dashboard.continueWatching.totalCourseSeconds > 0 && (
                         <>
                           <span className="text-outline font-mono text-xs">·</span>
-                          <span className="text-xs font-mono text-on-surface-variant">
+                          <span className="text-[11px] sm:text-xs font-mono text-on-surface-variant">
                             {formatWatchTime(dashboard.continueWatching.watchedCourseSeconds)} de{' '}
                             {formatWatchTime(dashboard.continueWatching.totalCourseSeconds)}{' '}
                             assistidas
@@ -614,10 +615,10 @@ export default function DashboardPage() {
                         </>
                       )}
                     </div>
-                    <h2 className="text-2xl font-bold text-on-surface tracking-tight">
+                    <h2 className="text-lg sm:text-2xl font-bold text-on-surface tracking-tight break-words">
                       {dashboard.continueWatching.courseTitle}
                     </h2>
-                    <p className="text-sm text-on-surface-variant mt-1">
+                    <p className="text-xs sm:text-sm text-on-surface-variant mt-1 break-words">
                       <span className="text-secondary font-medium">
                         {dashboard.continueWatching.moduleTitle}:
                       </span>{' '}
@@ -630,10 +631,10 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex items-center gap-4 w-full sm:w-auto shrink-0">
                     <Link
                       href={`/courses/${dashboard.continueWatching.courseId}?lesson=${dashboard.continueWatching.lessonId}`}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-sm transition-all shadow-md"
+                      className="w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-sm transition-all shadow-md"
                     >
                       <span
                         className="material-symbols-outlined text-[20px]"
@@ -647,6 +648,20 @@ export default function DashboardPage() {
                 </div>
               </section>
             )}
+
+            {/* Busca Mobile */}
+            <div className="sm:hidden mb-4">
+              <div className="flex items-center bg-surface-container-low px-3.5 py-2.5 rounded-xl border border-outline-variant/30 text-outline focus-within:border-primary/60">
+                <span className="material-symbols-outlined text-[18px] mr-2">search</span>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar cursos por título ou instrutor..."
+                  className="bg-transparent text-xs text-on-surface placeholder:text-outline focus:outline-none w-full"
+                />
+              </div>
+            </div>
 
             {/* Biblioteca de Cursos do Google Drive */}
             <section className="w-full">

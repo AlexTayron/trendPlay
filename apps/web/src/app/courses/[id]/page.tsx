@@ -18,6 +18,7 @@ import {
 } from '../../../lib/api';
 import { openDriveFilesPicker } from '../../../lib/google-picker';
 import { DriveFileBrowserModal } from '../../../components/DriveFileBrowserModal';
+import { CourseTutorPanel } from '../../../components/CourseTutorPanel';
 import {
   YouTubeLessonPlayer,
   type YouTubePlayerHandle,
@@ -159,6 +160,8 @@ function CoursePlayerContent() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [autoPlay, setAutoPlay] = useState(false);
   const [theaterMode, setTheaterMode] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'lessons' | 'tutor'>('lessons');
+  const [tutorDrawerOpen, setTutorDrawerOpen] = useState(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -715,48 +718,73 @@ function CoursePlayerContent() {
   const isYoutubeCourse =
     course.sourceType === 'youtube' || Boolean(course.driveFolderId?.startsWith('yt:playlist:'));
 
+  const handleOpenTutor = () => {
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
+    if (isDesktop && !theaterMode) {
+      setSidebarTab((prev) => (prev === 'tutor' ? 'lessons' : 'tutor'));
+    } else {
+      setTutorDrawerOpen(true);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-surface">
+    <div className="min-h-screen flex flex-col bg-surface overflow-x-hidden">
       {/* Barra Superior do Player */}
-      <header className="sticky top-0 z-40 h-16 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/25 px-4 sm:px-6 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <header className="sticky top-0 z-40 min-h-14 sm:h-16 py-2 sm:py-0 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/25 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link
             href="/"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface-variant transition-colors shrink-0"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface-variant transition-colors shrink-0"
           >
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
             <span className="hidden sm:inline">Biblioteca</span>
           </Link>
 
           <div className="min-w-0">
-            <h1 className="text-sm sm:text-base font-bold text-on-surface truncate">
+            <h1 className="text-xs sm:text-base font-bold text-on-surface truncate">
               {course.title}
             </h1>
-            <div className="flex items-center gap-2 text-[11px] font-mono text-outline">
-              <span>{course.progressPercent}% concluído</span>
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono text-outline truncate">
+              <span>{course.progressPercent}%</span>
               <span>·</span>
               <span>
                 {course.completedLessonsCount}/{course.lessonsCount} aulas
               </span>
               {course.totalDurationSeconds > 0 && (
                 <>
-                  <span>·</span>
-                  <span>{formatWatchTime(course.totalDurationSeconds)}</span>
+                  <span className="hidden sm:inline">·</span>
+                  <span className="hidden sm:inline">
+                    {formatWatchTime(course.totalDurationSeconds)}
+                  </span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <button
+            onClick={handleOpenTutor}
+            title="Abrir Tutor IA Gemini deste curso"
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+              sidebarTab === 'tutor' || tutorDrawerOpen
+                ? 'bg-secondary/20 text-secondary border-secondary/50'
+                : 'bg-secondary/10 hover:bg-secondary/20 text-secondary border-secondary/30'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+            <span className="hidden xs:inline sm:inline">Tutor IA</span>
+          </button>
+
           {!isYoutubeCourse && (
             <button
               onClick={() => setFileBrowserOpen(true)}
               disabled={attaching}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/15 hover:bg-secondary/25 text-secondary border border-secondary/30 text-xs font-semibold transition-all disabled:opacity-50"
+              title="Adicionar arquivos do Google Drive"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/30 text-xs font-medium transition-all disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-[16px]">add_to_drive</span>
-              <span className="hidden md:inline">
+              <span className="material-symbols-outlined text-[16px] text-primary">add_to_drive</span>
+              <span className="hidden xl:inline">
                 {attaching ? 'Carregando...' : 'Adicionar arquivos'}
               </span>
             </button>
@@ -764,8 +792,12 @@ function CoursePlayerContent() {
 
           <button
             onClick={toggleTheaterMode}
-            title={theaterMode ? 'Mostrar lista de aulas (Tecla T)' : 'Modo teatro: recolher lista de aulas (Tecla T)'}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            title={
+              theaterMode
+                ? 'Mostrar lista de aulas (Tecla T)'
+                : 'Modo teatro: recolher lista de aulas (Tecla T)'
+            }
+            className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
               theaterMode
                 ? 'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25'
                 : 'bg-surface-container hover:bg-surface-container-high border-outline-variant/30 text-on-surface-variant'
@@ -774,15 +806,14 @@ function CoursePlayerContent() {
             <span className="material-symbols-outlined text-[16px]">
               {theaterMode ? 'right_panel_open' : 'width_wide'}
             </span>
-            <span className="hidden md:inline">
-              {theaterMode ? 'Mostrar aulas' : 'Teatro'}
-            </span>
+            <span>{theaterMode ? 'Mostrar aulas' : 'Teatro'}</span>
           </button>
 
           <button
             onClick={handleSyncCourse}
             disabled={syncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs text-on-surface transition-colors disabled:opacity-50"
+            title="Sincronizar curso"
+            className="flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs text-on-surface transition-colors disabled:opacity-50"
           >
             <span
               className={`material-symbols-outlined text-[16px] ${syncing ? 'animate-spin' : ''}`}
@@ -795,7 +826,7 @@ function CoursePlayerContent() {
           <button
             onClick={() => setEditModalOpen(true)}
             title="Editar metadados do curso"
-            className="p-2 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-on-surface-variant"
+            className="p-1.5 sm:p-2 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-on-surface-variant"
           >
             <span className="material-symbols-outlined text-[16px]">edit</span>
           </button>
@@ -819,15 +850,15 @@ function CoursePlayerContent() {
         </div>
       )}
 
-      {/* Workspace Principal: Player (Esquerda) + Grade de Módulos/Aulas (Direita) */}
+      {/* Workspace Principal: Player (Esquerda) + Grade de Módulos/Aulas ou Tutor IA (Direita) */}
       <div
-        className={`flex-1 w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 transition-all ${
+        className={`flex-1 w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 transition-all ${
           theaterMode ? 'max-w-[1920px]' : 'max-w-[1700px]'
         }`}
       >
         {/* Área do Player + Materiais + Notas */}
         <div
-          className={`${theaterMode ? 'lg:col-span-12' : 'lg:col-span-8'} flex flex-col gap-6 transition-all`}
+          className={`${theaterMode ? 'lg:col-span-12' : 'lg:col-span-8'} flex flex-col gap-4 sm:gap-6 min-w-0 transition-all`}
         >
           {!activeLesson ? (
             <div className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low p-10 text-center">
@@ -925,7 +956,7 @@ function CoursePlayerContent() {
                       key={activeLesson.id}
                       src={getDriveStreamUrl(activeLesson.driveFileId)}
                       title={activeLesson.title}
-                      className="w-full h-[600px] border-0 bg-white"
+                      className="w-full h-[420px] sm:h-[580px] border-0 bg-white"
                     />
                   </div>
                 ) : (
@@ -964,20 +995,20 @@ function CoursePlayerContent() {
               </div>
 
               {/* Barra de Controles e Metadados da Aula */}
-              <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 p-5 flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  <div>
-                    <span className="text-xs font-mono text-secondary uppercase tracking-wider">
+              <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5 flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
+                  <div className="min-w-0">
+                    <span className="text-[11px] sm:text-xs font-mono text-secondary uppercase tracking-wider">
                       {activeLesson.moduleTitle}
                     </span>
-                    <h2 className="text-xl font-bold text-on-surface mt-0.5">
+                    <h2 className="text-lg sm:text-xl font-bold text-on-surface mt-0.5 break-words">
                       {activeLesson.title}
                     </h2>
                   </div>
 
                   <button
                     onClick={handleToggleCompleted}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                    className={`w-full sm:w-auto justify-center flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
                       activeLesson.isCompleted
                         ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                         : 'bg-surface-container hover:bg-surface-container-high text-on-surface border-outline-variant/30'
@@ -1062,7 +1093,7 @@ function CoursePlayerContent() {
                           ? 'Sair do modo teatro e mostrar aulas (Tecla T)'
                           : 'Modo teatro: expandir vídeo e recolher próximos títulos (Tecla T)'
                       }
-                      className={`ml-1 px-2.5 py-1 rounded-md text-xs font-medium border flex items-center gap-1.5 transition-all ${
+                      className={`hidden lg:flex ml-1 px-2.5 py-1 rounded-md text-xs font-medium border items-center gap-1.5 transition-all ${
                         theaterMode
                           ? 'bg-primary/15 text-primary border-primary/40'
                           : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant border-outline-variant/25'
@@ -1099,11 +1130,11 @@ function CoursePlayerContent() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button
                       disabled={!prevLesson}
                       onClick={() => prevLesson && selectLesson(prevLesson.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface disabled:opacity-35"
+                      className="flex-1 sm:flex-none justify-center flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface disabled:opacity-35"
                     >
                       <span className="material-symbols-outlined text-[16px]">skip_previous</span>
                       <span>Anterior</span>
@@ -1111,7 +1142,7 @@ function CoursePlayerContent() {
                     <button
                       disabled={!nextLesson}
                       onClick={() => nextLesson && selectLesson(nextLesson.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-container hover:bg-secondary-container text-xs font-semibold text-on-primary-container disabled:opacity-35"
+                      className="flex-1 sm:flex-none justify-center flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-primary-container hover:bg-secondary-container text-xs font-semibold text-on-primary-container disabled:opacity-35"
                     >
                       <span>Próxima</span>
                       <span className="material-symbols-outlined text-[16px]">skip_next</span>
@@ -1241,35 +1272,74 @@ function CoursePlayerContent() {
           )}
         </div>
 
-        {/* Sidebar de Conteúdo (Módulos e Aulas) — recolhida no Modo Teatro */}
+        {/* Sidebar de Conteúdo (Módulos/Aulas + Tutor IA Gemini) — recolhida no Modo Teatro */}
         {!theaterMode && (
-          <aside className="lg:col-span-4">
-            <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden sticky top-20">
-              <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-bold text-on-surface">Conteúdo do Curso</h2>
-                  <p className="text-[11px] text-outline font-mono mt-0.5">
-                    {course.modulesCount} módulos · {course.lessonsCount} aulas
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-primary">
-                    {course.progressPercent}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={toggleTheaterMode}
-                    title="Recolher lista (Modo Teatro · Tecla T)"
-                    className="p-1 rounded-md text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      right_panel_close
-                    </span>
-                  </button>
-                </div>
+          <aside className="lg:col-span-4 min-w-0">
+            <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden lg:sticky lg:top-20 flex flex-col">
+              {/* Abas: Aulas | Tutor Gemini */}
+              <div className="grid grid-cols-2 border-b border-outline-variant/20 bg-surface-container/70">
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab('lessons')}
+                  className={`py-2.5 px-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                    sidebarTab === 'lessons'
+                      ? 'border-primary text-on-surface bg-surface-container-low'
+                      : 'border-transparent text-outline hover:text-on-surface-variant'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">format_list_bulleted</span>
+                  <span>Aulas ({course.lessonsCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab('tutor')}
+                  className={`py-2.5 px-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                    sidebarTab === 'tutor'
+                      ? 'border-secondary text-secondary bg-surface-container-low'
+                      : 'border-transparent text-outline hover:text-secondary'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                  <span>Tutor Gemini</span>
+                </button>
               </div>
 
-            <div className="max-h-[calc(100vh-180px)] overflow-y-auto divide-y divide-outline-variant/15">
+              {sidebarTab === 'tutor' ? (
+                <div className="h-[520px] lg:h-[calc(100vh-145px)]">
+                  <CourseTutorPanel
+                    courseId={courseId}
+                    lessonId={activeLessonId}
+                    lessonTitle={activeLesson?.title}
+                    currentTimeSeconds={currentTime}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-sm font-bold text-on-surface">Conteúdo do Curso</h2>
+                      <p className="text-[11px] text-outline font-mono mt-0.5">
+                        {course.modulesCount} módulos · {course.lessonsCount} aulas
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-primary">
+                        {course.progressPercent}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={toggleTheaterMode}
+                        title="Recolher lista (Modo Teatro · Tecla T)"
+                        className="hidden lg:inline-flex p-1 rounded-md text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          right_panel_close
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[460px] lg:max-h-[calc(100vh-225px)] overflow-y-auto divide-y divide-outline-variant/15">
               {course.modules.map((mod) => {
                 const isOpen = expandedModules[mod.id] ?? true;
                 const completedInMod = mod.lessons.filter((l) => l.isCompleted).length;
@@ -1363,11 +1433,28 @@ function CoursePlayerContent() {
                   </div>
                 );
               })}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        </aside>
+          </aside>
         )}
       </div>
+
+      {/* Drawer do Tutor Gemini (Mobile e Modo Teatro) */}
+      {tutorDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm">
+          <div className="w-full sm:w-[440px] max-w-full h-full bg-surface-container-low border-l border-outline-variant/30 shadow-2xl">
+            <CourseTutorPanel
+              courseId={courseId}
+              lessonId={activeLessonId}
+              lessonTitle={activeLesson?.title}
+              currentTimeSeconds={currentTime}
+              onClose={() => setTutorDrawerOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       <DriveFileBrowserModal
         open={fileBrowserOpen}

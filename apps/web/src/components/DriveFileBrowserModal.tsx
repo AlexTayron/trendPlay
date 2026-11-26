@@ -165,10 +165,10 @@ export function DriveFileBrowserModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl rounded-2xl bg-surface-container-low border border-outline-variant/30 shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+      <div className="w-full max-w-3xl rounded-2xl bg-surface-container-low border border-outline-variant/30 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-outline-variant/25 flex items-center justify-between gap-4 bg-surface-container">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-outline-variant/25 flex items-center justify-between gap-3 bg-surface-container">
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-secondary text-[24px]">
               add_to_drive

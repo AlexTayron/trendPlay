@@ -204,6 +204,43 @@ export interface ImportRootFolderResult {
   courses: ImportDriveFolderResult[];
 }
 
+export interface TutorStatusResponse {
+  configured: boolean;
+  provider: 'gemini';
+  model: string;
+}
+
+export interface TutorMessageItem {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface TutorContextSummary {
+  courseTitle: string;
+  activeLessonTitle?: string | null;
+  modulesCount: number;
+  lessonsCount: number;
+  notesCount: number;
+  resourcesLoaded: number;
+  hasTranscript: boolean;
+}
+
+export interface TutorHistoryResponse {
+  conversationId: string | null;
+  messages: TutorMessageItem[];
+  contextSummary: TutorContextSummary;
+}
+
+export interface TutorChatResponse {
+  conversationId: string;
+  userMessage: TutorMessageItem;
+  assistantMessage: TutorMessageItem;
+  model: string;
+  contextSummary: TutorContextSummary;
+}
+
 export interface LessonNote {
   id: string;
   userId: string;
