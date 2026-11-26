@@ -17,11 +17,13 @@ import {
   getPickerToken,
   importDriveFolder,
   logout,
+  resolveThumbnailUrl,
   syncDriveCourse,
 } from '../lib/api';
 import { openDriveFolderPicker } from '../lib/google-picker';
 import { DriveFolderBrowserModal } from '../components/DriveFolderBrowserModal';
 import { YouTubeImportModal } from '../components/YouTubeImportModal';
+import { CourseEditModal } from '../components/CourseEditModal';
 import {
   formatWatchTime,
   getFirstName,
@@ -40,6 +42,7 @@ export default function DashboardPage() {
   const [importing, setImporting] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [ytModalOpen, setYtModalOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<CourseSummary | null>(null);
   const [syncingCourseId, setSyncingCourseId] = useState<string | null>(null);
   const [showManualImport, setShowManualImport] = useState(false);
   const [manualFolderInput, setManualFolderInput] = useState('');
@@ -635,9 +638,9 @@ export default function DashboardPage() {
                   <div className="p-4 sm:p-6 bg-surface-container-low rounded-2xl border border-secondary/20 shadow-xl flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 sm:gap-6">
                     <div className="flex items-start gap-3.5 sm:gap-4 flex-1 min-w-0">
                       <div className="w-16 h-14 sm:w-20 sm:h-16 rounded-xl overflow-hidden bg-gradient-to-br from-primary-container/30 to-secondary/20 border border-outline-variant/25 flex items-center justify-center shrink-0">
-                        {cwCourse?.thumbnailUrl ? (
+                        {resolveThumbnailUrl(cwCourse?.thumbnailUrl) ? (
                           <img
-                            src={cwCourse.thumbnailUrl}
+                            src={resolveThumbnailUrl(cwCourse?.thumbnailUrl)!}
                             alt={cw.courseTitle}
                             className="w-full h-full object-cover"
                           />
@@ -821,16 +824,17 @@ export default function DashboardPage() {
                     const isYoutube =
                       course.sourceType === 'youtube' ||
                       Boolean(course.driveFolderId?.startsWith('yt:playlist:'));
+                    const resolvedThumb = resolveThumbnailUrl(course.thumbnailUrl);
                     return (
                       <div
                         key={course.id}
                         className="group rounded-2xl bg-surface-container-low border border-outline-variant/25 hover:border-primary/40 transition-all overflow-hidden flex flex-col justify-between shadow-lg"
                       >
                         <div>
-                          {course.thumbnailUrl && (
+                          {resolvedThumb && (
                             <Link href={`/courses/${course.id}`} className="block relative h-36 w-full overflow-hidden bg-black">
                               <img
-                                src={course.thumbnailUrl}
+                                src={resolvedThumb}
                                 alt={course.title}
                                 className="w-full h-full object-cover opacity-85 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-300"
                               />
@@ -856,24 +860,36 @@ export default function DashboardPage() {
                                 </span>
                               )}
 
-                              <button
-                                onClick={() => handleSyncCourse(course)}
-                                disabled={isSyncing}
-                                title={
-                                  isYoutube
-                                    ? 'Sincronizar novos vídeos da playlist no YouTube'
-                                    : 'Sincronizar alterações da pasta no Google Drive'
-                                }
-                                className="p-1.5 rounded-lg text-outline hover:text-secondary hover:bg-surface-container-high transition-colors disabled:opacity-50"
-                              >
-                                <span
-                                  className={`material-symbols-outlined text-[18px] ${
-                                    isSyncing ? 'animate-spin text-secondary' : ''
-                                  }`}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCourse(course)}
+                                  title="Editar curso e capa"
+                                  className="p-1.5 rounded-lg text-outline hover:text-primary hover:bg-surface-container-high transition-colors"
                                 >
-                                  sync
-                                </span>
-                              </button>
+                                  <span className="material-symbols-outlined text-[18px]">
+                                    {resolvedThumb ? 'edit' : 'add_photo_alternate'}
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => handleSyncCourse(course)}
+                                  disabled={isSyncing}
+                                  title={
+                                    isYoutube
+                                      ? 'Sincronizar novos vídeos da playlist no YouTube'
+                                      : 'Sincronizar alterações da pasta no Google Drive'
+                                  }
+                                  className="p-1.5 rounded-lg text-outline hover:text-secondary hover:bg-surface-container-high transition-colors disabled:opacity-50"
+                                >
+                                  <span
+                                    className={`material-symbols-outlined text-[18px] ${
+                                      isSyncing ? 'animate-spin text-secondary' : ''
+                                    }`}
+                                  >
+                                    sync
+                                  </span>
+                                </button>
+                              </div>
                             </div>
 
                             <Link href={`/courses/${course.id}`}>
@@ -960,6 +976,21 @@ export default function DashboardPage() {
           onCourseImported={handleCourseImported}
           onRootImported={handleRootImported}
           onFallbackPicker={handleOpenFolderPicker}
+        />
+
+        <CourseEditModal
+          course={editingCourse}
+          onClose={() => setEditingCourse(null)}
+          onSaved={(updated) => {
+            setDashboard((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    courses: prev.courses.map((c) => (c.id === updated.id ? updated : c)),
+                  }
+                : prev,
+            );
+          }}
         />
 
         <YouTubeImportModal

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import pg from 'pg';
 import {
   ContinueWatchingItem,
@@ -446,13 +446,44 @@ export class LearningService {
   }
 
   /**
-   * Edição manual dos metadados do curso (D1).
+   * Edição manual dos metadados e capa do curso (D1).
    */
   async updateCourse(
     userId: string,
     courseId: string,
-    params: { title?: string; description?: string; instructorName?: string },
+    params: {
+      title?: string;
+      description?: string;
+      instructorName?: string;
+      thumbnailUrl?: string | null;
+    },
   ): Promise<CourseSummary> {
+    const shouldUpdateThumb = params.thumbnailUrl !== undefined;
+    let sanitizedThumb: string | null = null;
+
+    if (shouldUpdateThumb) {
+      const raw = (params.thumbnailUrl ?? '').trim();
+      if (raw.length > 0) {
+        if (raw.length > 1_500_000) {
+          throw new BadRequestException(
+            'A imagem de capa excede o limite permitido (1,5 MB). Tente uma imagem menor.',
+          );
+        }
+        const isAllowed =
+          /^https?:\/\/.+/i.test(raw) ||
+          /^drive-cover:[a-zA-Z0-9_-]+$/.test(raw) ||
+          /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(raw);
+        if (!isAllowed) {
+          throw new BadRequestException(
+            'Formato de capa inválido. Envie uma imagem (PNG, JPG, WebP, GIF) ou informe uma URL http(s).',
+          );
+        }
+        sanitizedThumb = raw;
+      } else {
+        sanitizedThumb = null;
+      }
+    }
+
     const client = await this.pgPool.connect();
     try {
       await client.query('BEGIN');
@@ -464,6 +495,7 @@ export class LearningService {
            SET title = COALESCE($2, title),
                description = COALESCE($3, description),
                instructor_name = COALESCE($4, instructor_name),
+               thumbnail_url = CASE WHEN $5::boolean THEN $6 ELSE thumbnail_url END,
                updated_at = now()
          WHERE id = $1 AND user_id = app_user_id()
          RETURNING id;
@@ -473,6 +505,8 @@ export class LearningService {
           params.title?.trim() || null,
           params.description !== undefined ? params.description : null,
           params.instructorName !== undefined ? params.instructorName : null,
+          shouldUpdateThumb,
+          sanitizedThumb,
         ],
       );
 

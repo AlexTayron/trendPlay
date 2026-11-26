@@ -853,15 +853,27 @@ export class DriveService {
 
       const directFiles: Array<DriveItem & { displayTitle: string }> = [];
       const subfolders: DriveItem[] = [];
+      let coverImageItem: DriveItem | null = null;
 
       for (const child of topChildren) {
         if (child.mimeType === FOLDER_MIME) {
           subfolders.push(child);
         } else {
-          directFiles.push({
-            ...child,
-            displayTitle: stripExtension(child.name),
-          });
+          const isCoverImage =
+            !coverImageItem &&
+            (child.mimeType.startsWith('image/') ||
+              /\.(png|jpe?g|webp|gif)$/i.test(child.name)) &&
+            /^(capa|cover|thumb|thumbnail|banner|folder|poster)([\s._-]|$)/i.test(
+              stripExtension(child.name).trim(),
+            );
+          if (isCoverImage) {
+            coverImageItem = child;
+          } else {
+            directFiles.push({
+              ...child,
+              displayTitle: stripExtension(child.name),
+            });
+          }
         }
       }
 
@@ -923,6 +935,7 @@ export class DriveService {
         folderId: cleanFolderId,
         folderName,
         folderParentId,
+        coverImageItem,
         moduleBuckets,
       });
 
@@ -951,6 +964,7 @@ export class DriveService {
       folderId: string;
       folderName: string;
       folderParentId: string | null;
+      coverImageItem?: DriveItem | null;
       moduleBuckets: Array<{
         driveFolderId: string | null;
         title: string;
@@ -971,10 +985,22 @@ export class DriveService {
         parentDriveId: payload.folderParentId,
       });
 
+      let detectedCoverUrl: string | null = null;
+      if (payload.coverImageItem) {
+        await this.upsertDriveSource(client, userId, {
+          driveFileId: payload.coverImageItem.id,
+          name: payload.coverImageItem.name,
+          mimeType: payload.coverImageItem.mimeType || 'image/jpeg',
+          isFolder: false,
+          parentDriveId: payload.folderId,
+        });
+        detectedCoverUrl = `drive-cover:${payload.coverImageItem.id}`;
+      }
+
       // Buscar ou criar curso vinculado a essa pasta
       const existingCourse = await client.query(
         `
-        SELECT id, title FROM courses
+        SELECT id, title, thumbnail_url AS "thumbnailUrl" FROM courses
          WHERE user_id = app_user_id() AND drive_source_id = $1
          LIMIT 1;
       `,
@@ -987,15 +1013,26 @@ export class DriveService {
       if (existingCourse.rows.length > 0) {
         courseId = existingCourse.rows[0].id;
         courseTitle = existingCourse.rows[0].title;
+        const currentThumb: string | null = existingCourse.rows[0].thumbnailUrl || null;
+        const shouldApplyDetectedCover =
+          Boolean(detectedCoverUrl) &&
+          (!currentThumb || currentThumb.startsWith('drive-cover:'));
+
         await client.query(
-          `UPDATE courses SET is_archived = false, updated_at = now() WHERE id = $1;`,
-          [courseId],
+          `
+          UPDATE courses
+             SET is_archived = false,
+                 thumbnail_url = CASE WHEN $2::boolean THEN $3 ELSE thumbnail_url END,
+                 updated_at = now()
+           WHERE id = $1;
+        `,
+          [courseId, shouldApplyDetectedCover, detectedCoverUrl],
         );
       } else {
         const createdCourse = await client.query(
           `
-          INSERT INTO courses (user_id, drive_source_id, title, description)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO courses (user_id, drive_source_id, title, description, thumbnail_url)
+          VALUES ($1, $2, $3, $4, $5)
           RETURNING id, title;
         `,
           [
@@ -1003,6 +1040,7 @@ export class DriveService {
             courseDriveSourceId,
             payload.folderName.slice(0, 255),
             `Curso sincronizado do Google Drive (${payload.folderName}).`,
+            detectedCoverUrl,
           ],
         );
         courseId = createdCourse.rows[0].id;

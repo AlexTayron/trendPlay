@@ -13,12 +13,12 @@ import {
   getLessonNotes,
   getPickerToken,
   syncDriveCourse,
-  updateCourse,
   updateLessonProgress,
 } from '../../../lib/api';
 import { openDriveFilesPicker } from '../../../lib/google-picker';
 import { DriveFileBrowserModal } from '../../../components/DriveFileBrowserModal';
 import { CourseTutorPanel } from '../../../components/CourseTutorPanel';
+import { CourseEditModal } from '../../../components/CourseEditModal';
 import {
   MaterialPreviewPanel,
   getMaterialKindMeta,
@@ -182,10 +182,6 @@ function CoursePlayerContent() {
   const [liveDuration, setLiveDuration] = useState(0);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editInstructor, setEditInstructor] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -283,9 +279,6 @@ function CoursePlayerContent() {
       try {
         const detail = await getCourseDetail(courseId);
         setCourse(detail);
-        setEditTitle(detail.title);
-        setEditInstructor(detail.instructorName || '');
-        setEditDescription(detail.description || '');
 
         setExpandedModules((prev) => {
           const next: Record<string, boolean> = { ...prev };
@@ -836,27 +829,6 @@ function CoursePlayerContent() {
       text: `${res.addedLessons} aula(s) e ${res.addedDocuments} documento(s) adicionados ao curso!`,
     });
     await loadCourse(true);
-  };
-
-  const handleSaveCourseEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingEdit(true);
-    try {
-      await updateCourse(courseId, {
-        title: editTitle,
-        instructorName: editInstructor,
-        description: editDescription,
-      });
-      setEditModalOpen(false);
-      await loadCourse(true);
-    } catch (err) {
-      setStatusMsg({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Erro ao salvar alterações do curso.',
-      });
-    } finally {
-      setSavingEdit(false);
-    }
   };
 
   if (loading) {
@@ -1954,77 +1926,14 @@ function CoursePlayerContent() {
         onFallbackPicker={handleAttachFilesFromPicker}
       />
 
-      {/* Modal de Edição Manual do Curso (D1) */}
-      {editModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <form
-            onSubmit={handleSaveCourseEdit}
-            className="w-full max-w-lg rounded-2xl bg-surface-container-low border border-outline-variant/30 p-6 space-y-4 shadow-2xl"
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-on-surface">Editar informações do curso</h2>
-              <button
-                type="button"
-                onClick={() => setEditModalOpen(false)}
-                className="text-outline hover:text-on-surface"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">Título</label>
-              <input
-                type="text"
-                required
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                className="w-full rounded-lg bg-surface-container-lowest border border-outline-variant/30 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">
-                Instrutor (opcional)
-              </label>
-              <input
-                type="text"
-                value={editInstructor}
-                onChange={(e) => setEditInstructor(e.target.value)}
-                placeholder="Ex.: Rodrigo Branas"
-                className="w-full rounded-lg bg-surface-container-lowest border border-outline-variant/30 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">Descrição</label>
-              <textarea
-                rows={3}
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                className="w-full rounded-lg bg-surface-container-lowest border border-outline-variant/30 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setEditModalOpen(false)}
-                className="px-4 py-2 rounded-lg bg-surface-container text-xs text-on-surface-variant"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={savingEdit}
-                className="px-4 py-2 rounded-lg bg-primary-container text-on-primary-container font-semibold text-xs"
-              >
-                {savingEdit ? 'Salvando...' : 'Salvar alterações'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* Modal de Edição Manual do Curso e Capa (D1) */}
+      <CourseEditModal
+        course={editModalOpen ? course : null}
+        onClose={() => setEditModalOpen(false)}
+        onSaved={() => {
+          loadCourse(true);
+        }}
+      />
     </div>
   );
 }

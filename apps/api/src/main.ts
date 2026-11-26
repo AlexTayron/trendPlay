@@ -11,6 +11,10 @@ async function bootstrap() {
   // Confia no proxy reverso (Nginx/Certbot) para reconhecer HTTPS e IP real
   app.set('trust proxy', 1);
 
+  // Permite envio de capas otimizadas em base64 (até 2MB) sem 413
+  app.useBodyParser('json', { limit: '2mb' });
+  app.useBodyParser('urlencoded', { limit: '2mb', extended: true });
+
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

@@ -67,6 +67,17 @@ export function getDriveStreamUrl(driveFileId: string, download = false): string
   return `${API_BASE_URL}/drive/files/${encodeURIComponent(driveFileId)}/stream${suffix}`;
 }
 
+export function resolveThumbnailUrl(thumbnailUrl?: string | null): string | null {
+  if (!thumbnailUrl) return null;
+  const trimmed = thumbnailUrl.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('drive-cover:')) {
+    const fileId = trimmed.slice('drive-cover:'.length);
+    return fileId ? getDriveStreamUrl(fileId) : null;
+  }
+  return trimmed;
+}
+
 export function getAuthConfig(): Promise<AuthConfigStatus> {
   return apiFetch<AuthConfigStatus>('/auth/config');
 }
@@ -85,7 +96,12 @@ export function getCourseDetail(courseId: string): Promise<CourseDetail> {
 
 export function updateCourse(
   courseId: string,
-  payload: { title?: string; description?: string; instructorName?: string },
+  payload: {
+    title?: string;
+    description?: string;
+    instructorName?: string;
+    thumbnailUrl?: string | null;
+  },
 ): Promise<CourseSummary> {
   return apiFetch<CourseSummary>(`/learning/courses/${encodeURIComponent(courseId)}`, {
     method: 'PATCH',

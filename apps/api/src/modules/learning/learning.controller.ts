@@ -68,6 +68,10 @@ class UpdateCourseDto {
   @IsOptional()
   @IsString()
   instructorName?: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
 }
 
 @Controller('learning')
