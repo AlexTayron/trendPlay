@@ -204,12 +204,14 @@ export function updateLessonProgress(
     isCompleted?: boolean;
     watchedDeltaSeconds?: number;
   },
+  keepalive = false,
 ): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>(
     `/learning/lessons/${encodeURIComponent(lessonId)}/progress`,
     {
       method: 'PUT',
       body: JSON.stringify(payload),
+      keepalive,
     },
   );
 }

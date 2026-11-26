@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import type { CourseDetail, LessonDetail, LessonNote } from '@devcore/shared';
 import {
   attachDriveFiles,
@@ -143,9 +143,8 @@ function LessonPlayProgressRing({
 function CoursePlayerContent() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const courseId = params.id;
-  const requestedLessonId = searchParams.get('lesson');
+  const initialRequestedLessonRef = useRef<string | null>(searchParams.get('lesson'));
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,6 +189,8 @@ function CoursePlayerContent() {
   const lastSavedAtRef = useRef<number>(0);
   const lastReportedTimeRef = useRef<number>(0);
   const restoredForLessonRef = useRef<string | null>(null);
+  const dirtyProgressRef = useRef<boolean>(false);
+  const lastCrossDeviceSyncRef = useRef<number>(0);
 
   useEffect(() => {
     try {
@@ -267,41 +268,101 @@ function CoursePlayerContent() {
     });
   };
 
-  const loadCourse = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const detail = await getCourseDetail(courseId);
-      setCourse(detail);
-      setEditTitle(detail.title);
-      setEditInstructor(detail.instructorName || '');
-      setEditDescription(detail.description || '');
+  const loadCourse = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const detail = await getCourseDetail(courseId);
+        setCourse(detail);
+        setEditTitle(detail.title);
+        setEditInstructor(detail.instructorName || '');
+        setEditDescription(detail.description || '');
 
-      const expanded: Record<string, boolean> = {};
-      detail.modules.forEach((m) => {
-        expanded[m.id] = true;
-      });
-      setExpandedModules(expanded);
+        setExpandedModules((prev) => {
+          const next: Record<string, boolean> = { ...prev };
+          detail.modules.forEach((m) => {
+            if (next[m.id] === undefined) {
+              next[m.id] = true;
+            }
+          });
+          return next;
+        });
 
-      const allLessons = detail.modules.flatMap((m) => m.lessons);
-      const preferred =
-        (requestedLessonId && allLessons.find((l) => l.id === requestedLessonId)?.id) ||
-        (detail.lastLessonId && allLessons.find((l) => l.id === detail.lastLessonId)?.id) ||
-        allLessons[0]?.id ||
-        null;
+        const allLessons = detail.modules.flatMap((m) => m.lessons);
+        const requested = initialRequestedLessonRef.current;
+        const preferred =
+          (requested && allLessons.find((l) => l.id === requested)?.id) ||
+          (detail.lastLessonId && allLessons.find((l) => l.id === detail.lastLessonId)?.id) ||
+          allLessons[0]?.id ||
+          null;
 
-      setActiveLessonId((prev) =>
-        prev && allLessons.some((l) => l.id === prev) ? prev : preferred,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar o curso.');
-    } finally {
-      setLoading(false);
-    }
-  }, [courseId, requestedLessonId]);
+        setActiveLessonId((prev) => {
+          if (silent) {
+            const localPlaying =
+              Boolean(videoRef.current && !videoRef.current.paused) ||
+              Boolean(audioRef.current && !audioRef.current.paused) ||
+              Boolean(ytPlayerRef.current?.isPlaying());
+
+            if (!localPlaying) {
+              // Se outro dispositivo (celular <-> PC) avançou para outra aula, acompanha automaticamente
+              if (
+                detail.lastLessonId &&
+                allLessons.some((l) => l.id === detail.lastLessonId) &&
+                prev !== detail.lastLessonId
+              ) {
+                dirtyProgressRef.current = false;
+                if (typeof window !== 'undefined') {
+                  window.history.replaceState(
+                    null,
+                    '',
+                    `/courses/${courseId}?lesson=${detail.lastLessonId}`,
+                  );
+                }
+                return detail.lastLessonId;
+              }
+
+              // Se é a mesma aula, mas outro dispositivo avançou o minuto, sincroniza o playhead pausado
+              const serverActive = prev ? allLessons.find((l) => l.id === prev) : null;
+              if (serverActive && serverActive.lastPositionSeconds >= 1) {
+                const serverPos = serverActive.lastPositionSeconds;
+                const localPos = isYoutubeLesson(serverActive)
+                  ? ytPlayerRef.current?.getCurrentTime() || 0
+                  : videoRef.current?.currentTime || audioRef.current?.currentTime || 0;
+                if (Math.abs(serverPos - localPos) >= 2) {
+                  if (isYoutubeLesson(serverActive)) {
+                    ytPlayerRef.current?.syncPosition(serverPos);
+                  } else if (videoRef.current && Number.isFinite(videoRef.current.duration)) {
+                    videoRef.current.currentTime = Math.min(serverPos, videoRef.current.duration);
+                  } else if (audioRef.current && Number.isFinite(audioRef.current.duration)) {
+                    audioRef.current.currentTime = Math.min(serverPos, audioRef.current.duration);
+                  }
+                  setCurrentTime(serverPos);
+                  lastReportedTimeRef.current = serverPos;
+                  dirtyProgressRef.current = false;
+                }
+              }
+            }
+          }
+          return prev && allLessons.some((l) => l.id === prev) ? prev : preferred;
+        });
+      } catch (err) {
+        if (!silent) {
+          setError(err instanceof Error ? err.message : 'Erro ao carregar o curso.');
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [courseId],
+  );
 
   useEffect(() => {
-    loadCourse();
+    loadCourse(false);
   }, [loadCourse]);
 
   const flatLessons = useMemo(() => {
@@ -347,34 +408,6 @@ function CoursePlayerContent() {
     }
   }, [playbackRate, activeLessonId]);
 
-  const selectLesson = useCallback(
-    (lessonId: string, autoStart = false) => {
-      shouldAutoStartRef.current = autoStart;
-      setYtAutoStart(autoStart);
-      setAutoPlayCountdown(null);
-      setActiveLessonId(lessonId);
-      router.replace(`/courses/${courseId}?lesson=${lessonId}`, { scroll: false });
-    },
-    [courseId, router],
-  );
-
-  // Contagem regressiva do Autoplay para próxima aula
-  useEffect(() => {
-    if (autoPlayCountdown === null) return;
-    if (!autoPlay || !nextLesson) {
-      setAutoPlayCountdown(null);
-      return;
-    }
-    if (autoPlayCountdown <= 0) {
-      selectLesson(nextLesson.id, true);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setAutoPlayCountdown((prev) => (prev !== null ? prev - 1 : null));
-    }, 1000);
-    return () => window.clearTimeout(timer);
-  }, [autoPlayCountdown, autoPlay, nextLesson, selectLesson]);
-
   const persistProgress = useCallback(
     async (
       lessonId: string,
@@ -382,14 +415,19 @@ function CoursePlayerContent() {
       durationSeconds: number,
       explicitCompleted?: boolean,
       watchedDeltaSeconds = 0,
+      keepalive = false,
     ) => {
       try {
-        await updateLessonProgress(lessonId, {
-          positionSeconds: Math.floor(positionSeconds),
-          durationSeconds: Math.floor(durationSeconds),
-          isCompleted: explicitCompleted,
-          watchedDeltaSeconds: Math.floor(watchedDeltaSeconds),
-        });
+        await updateLessonProgress(
+          lessonId,
+          {
+            positionSeconds: Math.floor(positionSeconds),
+            durationSeconds: Math.floor(durationSeconds),
+            isCompleted: explicitCompleted,
+            watchedDeltaSeconds: Math.floor(watchedDeltaSeconds),
+          },
+          keepalive,
+        );
 
         setCourse((prev) => {
           if (!prev) return prev;
@@ -435,6 +473,103 @@ function CoursePlayerContent() {
     [],
   );
 
+  const selectLesson = useCallback(
+    (lessonId: string, autoStart = false) => {
+      // Salva o progresso da aula que o usuário está saindo (sem bloquear a troca instantânea)
+      if (activeLesson && activeLesson.id !== lessonId) {
+        const pos = isYoutubeLesson(activeLesson)
+          ? ytPlayerRef.current?.getCurrentTime() || currentTime
+          : videoRef.current?.currentTime || audioRef.current?.currentTime || currentTime;
+        const dur = isYoutubeLesson(activeLesson)
+          ? ytPlayerRef.current?.getDuration() || liveDuration || activeLesson.durationSeconds
+          : videoRef.current?.duration || audioRef.current?.duration || activeLesson.durationSeconds;
+        if (pos > 0 && dirtyProgressRef.current) {
+          persistProgress(activeLesson.id, pos, dur);
+        }
+      }
+
+      // Registra imediatamente a aula escolhida como última acessada para sincronizar celular <-> PC
+      const nextTarget = flatLessons.find((l) => l.id === lessonId);
+      if (nextTarget) {
+        persistProgress(
+          nextTarget.id,
+          nextTarget.lastPositionSeconds || 0,
+          nextTarget.durationSeconds || 0,
+        );
+      }
+
+      dirtyProgressRef.current = false;
+      shouldAutoStartRef.current = autoStart;
+      setYtAutoStart(autoStart);
+      setAutoPlayCountdown(null);
+      setActiveLessonId(lessonId);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', `/courses/${courseId}?lesson=${lessonId}`);
+      }
+    },
+    [activeLesson, courseId, currentTime, flatLessons, liveDuration, persistProgress],
+  );
+
+  // Sincronização entre dispositivos (Celular <-> PC):
+  // - Salva ao sair da aba apenas se houve atividade local (não sobrescreve progresso mais novo de outro dispositivo)
+  // - Recarrega silenciosamente ao voltar para a aba ou focar a janela
+  useEffect(() => {
+    const flushCurrentProgress = () => {
+      if (!activeLesson || !dirtyProgressRef.current) return;
+      const pos = isYoutubeLesson(activeLesson)
+        ? ytPlayerRef.current?.getCurrentTime() || currentTime
+        : videoRef.current?.currentTime || audioRef.current?.currentTime || currentTime;
+      const dur = isYoutubeLesson(activeLesson)
+        ? ytPlayerRef.current?.getDuration() || liveDuration || activeLesson.durationSeconds
+        : videoRef.current?.duration || audioRef.current?.duration || activeLesson.durationSeconds;
+      const delta = Math.max(0, Math.min(30, pos - lastReportedTimeRef.current));
+      lastReportedTimeRef.current = pos;
+      dirtyProgressRef.current = false;
+      persistProgress(activeLesson.id, pos, dur, undefined, delta, true);
+    };
+
+    const syncFromServer = () => {
+      const now = Date.now();
+      if (now - lastCrossDeviceSyncRef.current < 3000) return;
+      lastCrossDeviceSyncRef.current = now;
+      loadCourse(true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushCurrentProgress();
+      } else if (document.visibilityState === 'visible') {
+        syncFromServer();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', syncFromServer);
+    window.addEventListener('pagehide', flushCurrentProgress);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', syncFromServer);
+      window.removeEventListener('pagehide', flushCurrentProgress);
+    };
+  }, [activeLesson, currentTime, liveDuration, loadCourse, persistProgress]);
+
+  // Contagem regressiva do Autoplay para próxima aula
+  useEffect(() => {
+    if (autoPlayCountdown === null) return;
+    if (!autoPlay || !nextLesson) {
+      setAutoPlayCountdown(null);
+      return;
+    }
+    if (autoPlayCountdown <= 0) {
+      selectLesson(nextLesson.id, true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setAutoPlayCountdown((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [autoPlayCountdown, autoPlay, nextLesson, selectLesson]);
+
   const handleVideoLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video || !activeLesson) return;
@@ -447,7 +582,7 @@ function CoursePlayerContent() {
     if (restoredForLessonRef.current !== activeLesson.id) {
       restoredForLessonRef.current = activeLesson.id;
       const savedPos = activeLesson.lastPositionSeconds || 0;
-      if (savedPos > 5 && video.duration && savedPos < video.duration * 0.96) {
+      if (savedPos >= 1 && video.duration && savedPos < video.duration * 0.97) {
         video.currentTime = savedPos;
         setCurrentTime(savedPos);
         lastReportedTimeRef.current = savedPos;
@@ -467,12 +602,16 @@ function CoursePlayerContent() {
     const video = videoRef.current;
     if (!video || !activeLesson) return;
     setCurrentTime(video.currentTime);
+    if (!video.paused) {
+      dirtyProgressRef.current = true;
+    }
 
     const now = Date.now();
     if (now - lastSavedAtRef.current >= 10_000) {
       const delta = Math.max(0, Math.min(30, video.currentTime - lastReportedTimeRef.current));
       lastSavedAtRef.current = now;
       lastReportedTimeRef.current = video.currentTime;
+      dirtyProgressRef.current = false;
       persistProgress(activeLesson.id, video.currentTime, video.duration || 0, undefined, delta);
     }
   };
@@ -483,6 +622,7 @@ function CoursePlayerContent() {
     const delta = Math.max(0, Math.min(30, video.currentTime - lastReportedTimeRef.current));
     lastSavedAtRef.current = Date.now();
     lastReportedTimeRef.current = video.currentTime;
+    dirtyProgressRef.current = false;
     persistProgress(
       activeLesson.id,
       video.currentTime,
@@ -499,6 +639,7 @@ function CoursePlayerContent() {
   const handleAudioEnded = () => {
     if (!activeLesson) return;
     const dur = audioRef.current?.duration || activeLesson.durationSeconds;
+    dirtyProgressRef.current = false;
     persistProgress(activeLesson.id, dur, dur, true);
     if (autoPlay && nextLesson) {
       setAutoPlayCountdown(3);
@@ -513,7 +654,7 @@ function CoursePlayerContent() {
         persistProgress(activeLesson.id, activeLesson.lastPositionSeconds || 0, durationSeconds);
       }
     }
-    if (activeLesson.lastPositionSeconds > 5) {
+    if (activeLesson.lastPositionSeconds >= 1) {
       lastReportedTimeRef.current = activeLesson.lastPositionSeconds;
       setCurrentTime(activeLesson.lastPositionSeconds);
     }
@@ -522,6 +663,7 @@ function CoursePlayerContent() {
   const handleYoutubeTimeUpdate = (pos: number, dur: number) => {
     if (!activeLesson) return;
     setCurrentTime(pos);
+    dirtyProgressRef.current = true;
     if (dur > 0 && Number.isFinite(dur)) {
       setLiveDuration(dur);
     }
@@ -530,6 +672,7 @@ function CoursePlayerContent() {
       const delta = Math.max(0, Math.min(30, pos - lastReportedTimeRef.current));
       lastSavedAtRef.current = now;
       lastReportedTimeRef.current = pos;
+      dirtyProgressRef.current = false;
       persistProgress(activeLesson.id, pos, dur || activeLesson.durationSeconds, undefined, delta);
     }
   };
@@ -539,6 +682,7 @@ function CoursePlayerContent() {
     const delta = Math.max(0, Math.min(30, pos - lastReportedTimeRef.current));
     lastSavedAtRef.current = Date.now();
     lastReportedTimeRef.current = pos;
+    dirtyProgressRef.current = false;
     persistProgress(activeLesson.id, pos, dur || activeLesson.durationSeconds, undefined, delta);
   };
 
@@ -548,6 +692,7 @@ function CoursePlayerContent() {
     const delta = Math.max(0, Math.min(30, finalDur - lastReportedTimeRef.current));
     lastSavedAtRef.current = Date.now();
     lastReportedTimeRef.current = finalDur;
+    dirtyProgressRef.current = false;
     persistProgress(activeLesson.id, finalDur, finalDur, true, delta);
     if (autoPlay && nextLesson) {
       setAutoPlayCountdown(3);
@@ -635,7 +780,7 @@ function CoursePlayerContent() {
           res.warning ||
           `Curso sincronizado: ${res.modulesCount} módulo(s), ${res.lessonsCount} aula(s) e ${res.documentsCount} documento(s).`,
       });
-      await loadCourse();
+      await loadCourse(true);
     } catch (err) {
       setStatusMsg({
         type: 'error',
@@ -664,7 +809,7 @@ function CoursePlayerContent() {
         type: 'success',
         text: `${res.addedLessons} aula(s) e ${res.addedDocuments} documento(s) adicionados ao curso!`,
       });
-      await loadCourse();
+      await loadCourse(true);
     } catch (err) {
       setStatusMsg({
         type: 'error',
@@ -683,7 +828,7 @@ function CoursePlayerContent() {
       type: 'success',
       text: `${res.addedLessons} aula(s) e ${res.addedDocuments} documento(s) adicionados ao curso!`,
     });
-    await loadCourse();
+    await loadCourse(true);
   };
 
   const handleSaveCourseEdit = async (e: React.FormEvent) => {
@@ -696,7 +841,7 @@ function CoursePlayerContent() {
         description: editDescription,
       });
       setEditModalOpen(false);
-      await loadCourse();
+      await loadCourse(true);
     } catch (err) {
       setStatusMsg({
         type: 'error',
@@ -917,25 +1062,6 @@ function CoursePlayerContent() {
           )}
 
           <button
-            onClick={toggleTheaterMode}
-            title={
-              theaterMode
-                ? 'Mostrar lista de aulas (Tecla T)'
-                : 'Modo teatro: recolher lista de aulas (Tecla T)'
-            }
-            className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              theaterMode
-                ? 'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25'
-                : 'bg-surface-container hover:bg-surface-container-high border-outline-variant/30 text-on-surface-variant'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[16px]">
-              {theaterMode ? 'right_panel_open' : 'width_wide'}
-            </span>
-            <span>{theaterMode ? 'Mostrar aulas' : 'Teatro'}</span>
-          </button>
-
-          <button
             onClick={handleSyncCourse}
             disabled={syncing}
             title="Sincronizar curso"
@@ -1063,7 +1189,13 @@ function CoursePlayerContent() {
               </div>
 
               {/* Container de Mídia */}
-              <div className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-black border border-outline-variant/25 shadow-2xl">
+              <div
+                className={`relative overflow-hidden bg-black border border-outline-variant/25 shadow-2xl transition-all ${
+                  theaterMode
+                    ? '-mx-3 sm:mx-0 rounded-none sm:rounded-2xl'
+                    : 'rounded-xl sm:rounded-2xl'
+                }`}
+              >
                 {isYoutubeLesson(activeLesson) && getYoutubeVideoId(activeLesson) ? (
                   <YouTubeLessonPlayer
                     key={activeLesson.id}
@@ -1218,6 +1350,22 @@ function CoursePlayerContent() {
                     </span>
                     <span>Ocultar concluídas</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={toggleTheaterMode}
+                    title={theaterMode ? 'Sair do modo teatro' : 'Ativar modo teatro'}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1 transition-all ${
+                      theaterMode
+                        ? 'bg-primary/15 text-primary border-primary/40'
+                        : 'bg-surface-container text-on-surface-variant border-outline-variant/25'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">
+                      {theaterMode ? 'right_panel_open' : 'width_wide'}
+                    </span>
+                    <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
+                  </button>
                 </div>
 
                 {isVideoLesson(activeLesson) && (
@@ -1242,7 +1390,8 @@ function CoursePlayerContent() {
                 )}
               </div>
 
-              {/* Abas Segmentadas Mobile (Aulas | Tutor IA | Notas) */}
+              {/* Abas Segmentadas Mobile (Aulas | Tutor IA | Notas) — recolhidas no Modo Teatro */}
+              {!theaterMode && (
               <div className="lg:hidden space-y-3">
                 <div className="p-1 rounded-2xl bg-surface-container border border-outline-variant/25 grid grid-cols-3 gap-1">
                   <button
@@ -1308,6 +1457,7 @@ function CoursePlayerContent() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Barra de Controles e Metadados da Aula (Desktop) */}
               <div className="hidden lg:flex rounded-2xl bg-surface-container-low border border-outline-variant/25 p-5 flex-col gap-4">
@@ -1408,7 +1558,7 @@ function CoursePlayerContent() {
                           ? 'Sair do modo teatro e mostrar aulas (Tecla T)'
                           : 'Modo teatro: expandir vídeo e recolher próximos títulos (Tecla T)'
                       }
-                      className={`hidden lg:flex ml-1 px-2.5 py-1 rounded-md text-xs font-medium border items-center gap-1.5 transition-all ${
+                      className={`flex ml-1 px-2.5 py-1 rounded-md text-xs font-medium border items-center gap-1.5 transition-all ${
                         theaterMode
                           ? 'bg-primary/15 text-primary border-primary/40'
                           : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant border-outline-variant/25'
@@ -1420,28 +1570,14 @@ function CoursePlayerContent() {
                       <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
                     </button>
 
-                    {isYoutubeLesson(activeLesson) && getYoutubeVideoId(activeLesson) ? (
+                    {!isYoutubeLesson(activeLesson) && activeLesson.driveFileId && (
                       <a
-                        href={`https://www.youtube.com/watch?v=${getYoutubeVideoId(activeLesson)}`}
-                        target="_blank"
-                        rel="noreferrer"
+                        href={getDriveStreamUrl(activeLesson.driveFileId, true)}
                         className="ml-1 px-2.5 py-1 rounded-md bg-surface-container hover:bg-surface-container-high text-xs text-on-surface-variant flex items-center gap-1"
                       >
-                        <span className="material-symbols-outlined text-[15px] text-red-400">
-                          smart_display
-                        </span>
-                        <span>Abrir no YouTube</span>
+                        <span className="material-symbols-outlined text-[15px]">download</span>
+                        <span>Baixar</span>
                       </a>
-                    ) : (
-                      activeLesson.driveFileId && (
-                        <a
-                          href={getDriveStreamUrl(activeLesson.driveFileId, true)}
-                          className="ml-1 px-2.5 py-1 rounded-md bg-surface-container hover:bg-surface-container-high text-xs text-on-surface-variant flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">download</span>
-                          <span>Baixar</span>
-                        </a>
-                      )
                     )}
                   </div>
 
@@ -1470,7 +1606,7 @@ function CoursePlayerContent() {
               {activeLesson.resources.length > 0 && (
                 <div
                   className={`${
-                    mobileTab === 'notes' ? 'block' : 'hidden lg:block'
+                    !theaterMode && mobileTab === 'notes' ? 'block' : 'hidden lg:block'
                   } rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5`}
                 >
                   <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
@@ -1517,7 +1653,7 @@ function CoursePlayerContent() {
               {/* Anotações da Aula com Timestamp */}
               <div
                 className={`${
-                  mobileTab === 'notes' ? 'block' : 'hidden lg:block'
+                  !theaterMode && mobileTab === 'notes' ? 'block' : 'hidden lg:block'
                 } rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5`}
               >
                 <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
@@ -1661,16 +1797,6 @@ function CoursePlayerContent() {
                       <span className="text-xs font-mono font-bold text-primary">
                         {course.progressPercent}%
                       </span>
-                      <button
-                        type="button"
-                        onClick={toggleTheaterMode}
-                        title="Recolher lista (Modo Teatro · Tecla T)"
-                        className="p-1 rounded-md text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          right_panel_close
-                        </span>
-                      </button>
                     </div>
                   </div>
 

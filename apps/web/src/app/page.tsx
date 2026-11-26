@@ -48,8 +48,10 @@ export default function DashboardPage() {
     text: string;
   } | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [cfg, dash] = await Promise.all([
         getAuthConfig().catch(() => null),
@@ -70,13 +72,17 @@ export default function DashboardPage() {
         setDashboard(dash);
       }
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Não foi possível conectar à API do DevCore (porta 4000).';
-      setBanner({ type: 'error', text: msg });
+      if (!silent) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Não foi possível conectar à API do DevCore (porta 4000).';
+        setBanner({ type: 'error', text: msg });
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -96,6 +102,26 @@ export default function DashboardPage() {
     }
 
     loadData();
+
+    // Sincroniza automaticamente ao voltar para a aba ou focar a janela (celular <-> PC)
+    let lastRefresh = 0;
+    const triggerSilentRefresh = () => {
+      const now = Date.now();
+      if (now - lastRefresh < 3000) return;
+      lastRefresh = now;
+      loadData(true);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        triggerSilentRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', triggerSilentRefresh);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', triggerSilentRefresh);
+    };
   }, [loadData]);
 
   const handleCourseImported = async (result: ImportDriveFolderResult) => {
