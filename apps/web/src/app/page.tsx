@@ -333,10 +333,27 @@ export default function DashboardPage() {
             ) : (
               <a
                 href={getGoogleAuthUrl()}
-                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-xs transition-all"
+                className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs transition-all shadow-md"
               >
-                <span className="material-symbols-outlined text-[18px]">cloud_sync</span>
-                <span className="hidden sm:inline">Conectar Google Drive</span>
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="#4285F4"
+                    d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.08 3.56-5.15 3.56-8.65Z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.87-3c-1.07.72-2.44 1.15-4.06 1.15-3.12 0-5.77-2.11-6.72-4.95H1.28v3.1A12 12 0 0 0 12 24Z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.29A7.2 7.2 0 0 1 4.9 12c0-.79.14-1.56.38-2.29v-3.1H1.28A12 12 0 0 0 0 12c0 1.94.46 3.77 1.28 5.39l4-3.1Z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.76c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4 3.1c.95-2.84 3.6-4.95 6.72-4.95Z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Entrar com Google</span>
                 <span className="sm:hidden">Entrar</span>
               </a>
             )}
@@ -386,94 +403,255 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Estado Não Autenticado */}
+        {/* Estado Não Autenticado — Landing Page de Entrada */}
         {!loading && unauthenticated && (
-          <section className="mt-4 sm:mt-8">
-            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#070d18] via-[#0c1626] to-[#0a1220] border border-outline-variant/20 shadow-2xl p-5 sm:p-8 md:p-12">
-              <div className="max-w-3xl">
-                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/15 text-secondary text-[11px] sm:text-xs font-mono font-semibold uppercase tracking-wider mb-4">
-                  <span className="material-symbols-outlined text-[16px]">folder_open</span>
-                  ACERVO PESSOAL · GOOGLE DRIVE &amp; YOUTUBE
-                </span>
-                <h1 className="text-2xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
-                  Seus cursos do Google Drive e YouTube em uma plataforma de estudo.
-                </h1>
-                <p className="text-slate-300 mt-4 text-base leading-relaxed">
-                  Conecte sua conta Google, selecione as pastas dos seus cursos usando o Google
-                  Picker e estude com player HTML5 próprio, controle de velocidade, progresso
-                  automático e anotações vinculadas ao minuto exato do vídeo.
-                </p>
+          <section className="mt-4 sm:mt-8 space-y-6 sm:space-y-8">
+            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#070d18] via-[#0d182b] to-[#08101d] border border-outline-variant/25 shadow-2xl p-6 sm:p-10 lg:p-14">
+              {/* Brilhos ambientais sutis */}
+              <div
+                className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full bg-primary/15 blur-3xl"
+                aria-hidden="true"
+              />
+              <div
+                className="pointer-events-none absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-secondary/10 blur-3xl"
+                aria-hidden="true"
+              />
 
-                <div className="mt-8 flex flex-wrap items-center gap-4">
-                  <a
-                    href={getGoogleAuthUrl()}
-                    className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-bold text-sm transition-all shadow-lg"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">login</span>
-                    <span>Entrar e Conectar Google Drive</span>
-                  </a>
+              <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+                {/* Coluna Esquerda: Headline + Entrada Exclusiva Google */}
+                <div className="lg:col-span-7">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/10 border border-secondary/30 text-secondary text-[11px] font-mono font-semibold uppercase tracking-wider mb-5">
+                    <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+                    <span>Entrada exclusiva pela sua conta Google</span>
+                  </div>
+
+                  <h1 className="text-3xl sm:text-5xl lg:text-[54px] font-extrabold text-white tracking-tight leading-[1.08]">
+                    Uma plataforma.{' '}
+                    <span className="block bg-gradient-to-r from-primary via-secondary to-tertiary bg-clip-text text-transparent">
+                      Seus conteúdos.
+                    </span>
+                  </h1>
+
+                  <p className="text-slate-300 mt-5 text-sm sm:text-base lg:text-[17px] leading-relaxed max-w-2xl">
+                    Transforme suas pastas do <strong className="text-white">Google Drive</strong> e
+                    playlists do <strong className="text-white">YouTube</strong> em um ambiente
+                    organizado de estudos — com player dedicado, leitor de PDF/Word/imagens,
+                    anotações por minuto e Tutor IA Gemini que entende cada curso.
+                  </p>
+
+                  {/* CTA Principal — Login Exclusivo Google */}
+                  <div className="mt-7 sm:mt-8 flex flex-col sm:flex-row sm:items-center gap-3.5">
+                    <a
+                      href={getGoogleAuthUrl()}
+                      className="inline-flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm transition-all shadow-xl hover:scale-[1.01]"
+                    >
+                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          fill="#4285F4"
+                          d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.08 3.56-5.15 3.56-8.65Z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.87-3c-1.07.72-2.44 1.15-4.06 1.15-3.12 0-5.77-2.11-6.72-4.95H1.28v3.1A12 12 0 0 0 12 24Z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.28 14.29A7.2 7.2 0 0 1 4.9 12c0-.79.14-1.56.38-2.29v-3.1H1.28A12 12 0 0 0 0 12c0 1.94.46 3.77 1.28 5.39l4-3.1Z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 4.76c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4 3.1c.95-2.84 3.6-4.95 6.72-4.95Z"
+                        />
+                      </svg>
+                      <span>Continuar com sua conta Google</span>
+                    </a>
+
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <span className="material-symbols-outlined text-emerald-400 text-[18px] shrink-0">
+                        verified_user
+                      </span>
+                      <span>Sem senhas extras · Seu acervo fica 100% privado na sua conta</span>
+                    </div>
+                  </div>
+
+                  {/* Selos rápidos de recursos */}
+                  <div className="mt-6 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-300">
+                    <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
+                      Google Drive &amp; YouTube
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
+                      Sincronizado PC ↔ Celular
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
+                      Tutor IA Gemini
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
+                      Leitor PDF · Word · Imagem
+                    </span>
+                  </div>
+
+                  {authConfig && (!authConfig.googleConfigured || !authConfig.pickerConfigured) && (
+                    <div className="mt-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-100 text-xs space-y-1.5">
+                      <div className="flex items-center gap-2 font-semibold text-amber-300">
+                        <span className="material-symbols-outlined text-[18px]">settings</span>
+                        <span>Configuração pendente no arquivo .env</span>
+                      </div>
+                      <p className="text-amber-200/90 leading-relaxed">
+                        Preencha{' '}
+                        {!authConfig.googleConfigured && (
+                          <code className="px-1.5 py-0.5 rounded bg-black/30 font-mono">
+                            GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+                          </code>
+                        )}
+                        {!authConfig.googleConfigured && !authConfig.pickerConfigured && ' e '}
+                        {!authConfig.pickerConfigured && (
+                          <code className="px-1.5 py-0.5 rounded bg-black/30 font-mono">
+                            GOOGLE_PICKER_API_KEY
+                          </code>
+                        )}{' '}
+                        no servidor para ativar a autenticação Google.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {authConfig && (!authConfig.googleConfigured || !authConfig.pickerConfigured) && (
-                  <div className="mt-8 p-5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-100 text-xs space-y-2">
-                    <div className="flex items-center gap-2 font-semibold text-amber-300">
-                      <span className="material-symbols-outlined text-[18px]">settings</span>
-                      <span>Configuração pendente no arquivo .env</span>
+                {/* Coluna Direita: Cartão Visual "Como Funciona" */}
+                <div className="lg:col-span-5">
+                  <div className="rounded-2xl bg-[#0b1220]/90 border border-outline-variant/30 p-5 sm:p-6 shadow-2xl space-y-5">
+                    <div className="flex items-center justify-between gap-2 pb-4 border-b border-outline-variant/20">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-400/80" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
+                      </div>
+                      <span className="text-[11px] font-mono text-secondary">
+                        SEU AMBIENTE DE ESTUDOS
+                      </span>
                     </div>
-                    <p className="text-amber-200/90 leading-relaxed">
-                      Para ativar a conexão com o Google Drive, preencha{' '}
-                      {!authConfig.googleConfigured && (
-                        <code className="px-1.5 py-0.5 rounded bg-black/30 font-mono">
-                          GOOGLE_CLIENT_ID
-                        </code>
-                      )}
-                      {!authConfig.googleConfigured && ' e '}
-                      {!authConfig.googleConfigured && (
-                        <code className="px-1.5 py-0.5 rounded bg-black/30 font-mono">
-                          GOOGLE_CLIENT_SECRET
-                        </code>
-                      )}
-                      {!authConfig.googleConfigured && !authConfig.pickerConfigured && ' além de '}
-                      {!authConfig.pickerConfigured && (
-                        <code className="px-1.5 py-0.5 rounded bg-black/30 font-mono">
-                          GOOGLE_PICKER_API_KEY
-                        </code>
-                      )}{' '}
-                      no arquivo <code className="font-mono">.env</code> na raiz do projeto e
-                      reinicie a API.
-                    </p>
-                  </div>
-                )}
 
-                <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8 border-t border-slate-800/80">
-                  <div className="p-4 rounded-xl bg-surface-container-low/70 border border-outline-variant/20">
-                    <span className="material-symbols-outlined text-primary mb-2">
-                      drive_folder_upload
-                    </span>
-                    <h3 className="text-sm font-semibold text-white">1. Selecione a pasta</h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      A pasta vira Curso, subpastas viram Módulos e vídeos/PDFs viram Aulas.
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-surface-container-low/70 border border-outline-variant/20">
-                    <span className="material-symbols-outlined text-secondary mb-2">
-                      play_circle
-                    </span>
-                    <h3 className="text-sm font-semibold text-white">2. Player HTML5 com Proxy</h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Streaming autenticado com Range Requests, controle de velocidade e retomada.
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-surface-container-low/70 border border-outline-variant/20">
-                    <span className="material-symbols-outlined text-tertiary mb-2">edit_note</span>
-                    <h3 className="text-sm font-semibold text-white">3. Progresso & Notas</h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Anotações salvas no segundo exato do vídeo com isolamento RLS por usuário.
-                    </p>
+                    <div className="space-y-3.5">
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-container/60 border border-outline-variant/20">
+                        <div className="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                          01
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-bold text-white">
+                            Entre com sua conta Google
+                          </h3>
+                          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-relaxed">
+                            Acesso exclusivo e individual: cada usuário enxerga somente seus
+                            próprios cursos, progresso e anotações.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-container/60 border border-outline-variant/20">
+                        <div className="w-8 h-8 rounded-lg bg-secondary/15 text-secondary flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                          02
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-bold text-white">
+                            Conecte pastas do Drive ou playlists
+                          </h3>
+                          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-relaxed">
+                            Suas pastas viram cursos e módulos automaticamente, com suporte a
+                            vídeos, PDFs, Word, imagens e playlists do YouTube.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-container/60 border border-outline-variant/20">
+                        <div className="w-8 h-8 rounded-lg bg-tertiary/15 text-tertiary flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                          03
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-bold text-white">
+                            Estude em qualquer dispositivo
+                          </h3>
+                          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-relaxed">
+                            Comece no computador e continue do celular exatamente no segundo em
+                            que parou, com apoio do Tutor IA Gemini.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-primary text-[16px]">
+                          lock
+                        </span>
+                        <span>Acesso somente leitura ao Drive</span>
+                      </span>
+                      <span className="font-mono text-emerald-300">100% seu</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* 4 Pilares da Plataforma */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                <span className="material-symbols-outlined text-primary text-[26px] mb-2.5">
+                  cloud_done
+                </span>
+                <h3 className="text-sm font-bold text-white">Seus arquivos, seu controle</h3>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  Nada é duplicado ou compartilhado. Os vídeos e materiais permanecem seguros no
+                  seu próprio Google Drive.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                <span className="material-symbols-outlined text-secondary text-[26px] mb-2.5">
+                  smart_display
+                </span>
+                <h3 className="text-sm font-bold text-white">Player dedicado e fluido</h3>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  Troca de aulas sem recarregar a página, velocidade ajustável, modo teatro,
+                  autoplay e player próprio até no YouTube.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                <span className="material-symbols-outlined text-emerald-400 text-[26px] mb-2.5">
+                  menu_book
+                </span>
+                <h3 className="text-sm font-bold text-white">Materiais ao lado da aula</h3>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  Abra PDFs, documentos Word e imagens diretamente na plataforma e salve
+                  anotações ancoradas no minuto exato do vídeo.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                <span className="material-symbols-outlined text-tertiary text-[26px] mb-2.5">
+                  auto_awesome
+                </span>
+                <h3 className="text-sm font-bold text-white">Tutor IA que entende o curso</h3>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  Converse com o Gemini com contexto da ementa, da aula atual, das suas notas e
+                  dos materiais de apoio do curso.
+                </p>
+              </div>
+            </div>
+
+            {/* Rodapé Institucional (requisito Google OAuth Produção) */}
+            <footer className="pt-4 border-t border-outline-variant/20 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-outline">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[16px]">terminal</span>
+                <span>DevCore · Uma plataforma. Seus conteúdos.</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <Link href="/privacidade" className="hover:text-on-surface transition-colors">
+                  Política de Privacidade
+                </Link>
+                <Link href="/termos" className="hover:text-on-surface transition-colors">
+                  Termos de Uso
+                </Link>
+              </div>
+            </footer>
           </section>
         )}
 
