@@ -13,6 +13,7 @@ import {
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -47,10 +48,24 @@ class ImportCourseFolderDto {
   folderName?: string;
 
   @IsOptional()
+  @IsIn(['course', 'movie', 'series', 'auto'])
+  contentType?: 'course' | 'movie' | 'series' | 'auto';
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PickedFileDto)
   selectedFiles?: PickedFileDto[];
+}
+
+class ImportMovieFileDto {
+  @IsString()
+  @IsNotEmpty()
+  fileId!: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
 }
 
 class AttachFilesDto {
@@ -108,7 +123,19 @@ export class DriveController {
     @CurrentUserId() userId: string,
     @Body() body: ImportCourseFolderDto,
   ) {
-    return this.driveService.importRootCoursesFolder(userId, body.folderId);
+    return this.driveService.importRootCoursesFolder(
+      userId,
+      body.folderId,
+      body.contentType || 'course',
+    );
+  }
+
+  @Post('streaming/import-file')
+  importMovieFile(
+    @CurrentUserId() userId: string,
+    @Body() body: ImportMovieFileDto,
+  ) {
+    return this.driveService.importMovieFile(userId, body);
   }
 
   @Post('courses/:courseId/sync')

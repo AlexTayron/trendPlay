@@ -105,8 +105,11 @@ export interface ModuleWithLessons extends Module {
   lessons: LessonDetail[];
 }
 
+export type ContentType = 'course' | 'movie' | 'series';
+
 export interface CourseSummary extends Course {
   sourceType?: 'drive' | 'youtube';
+  contentType: ContentType;
   driveFolderId?: string | null;
   modulesCount: number;
   lessonsCount: number;
@@ -126,6 +129,7 @@ export interface CourseDetail extends CourseSummary {
 export interface ContinueWatchingItem {
   courseId: string;
   courseTitle: string;
+  contentType: ContentType;
   instructorName?: string | null;
   moduleTitle: string;
   lessonId: string;
@@ -150,12 +154,14 @@ export interface DashboardOverview {
   drive: DriveConnectionStatus;
   stats: DashboardStats;
   continueWatching: ContinueWatchingItem | null;
+  streamingContinueWatching?: ContinueWatchingItem | null;
   courses: CourseSummary[];
 }
 
 export interface ImportDriveFolderResult {
   courseId: string;
   title: string;
+  contentType?: ContentType;
   modulesCount: number;
   lessonsCount: number;
   documentsCount: number;

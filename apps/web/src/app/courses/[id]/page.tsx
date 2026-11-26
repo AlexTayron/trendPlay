@@ -167,6 +167,7 @@ function CoursePlayerContent() {
   const [theaterMode, setTheaterMode] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'lessons' | 'tutor'>('lessons');
   const [mobileTab, setMobileTab] = useState<'lessons' | 'tutor' | 'notes'>('lessons');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
   const [tutorDrawerOpen, setTutorDrawerOpen] = useState(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -400,6 +401,13 @@ function CoursePlayerContent() {
       .then(setNotes)
       .catch(() => setNotes([]));
   }, [activeLessonId]);
+
+  // Sincronizar temporada selecionada com o episódio ativo (modo Série)
+  useEffect(() => {
+    if (activeLesson?.moduleId) {
+      setSelectedSeasonId(activeLesson.moduleId);
+    }
+  }, [activeLesson?.moduleId]);
 
   // Aplicar velocidade de reprodução
   useEffect(() => {
@@ -859,6 +867,114 @@ function CoursePlayerContent() {
 
   const isYoutubeCourse =
     course.sourceType === 'youtube' || Boolean(course.driveFolderId?.startsWith('yt:playlist:'));
+  const contentType = course.contentType || 'course';
+  const isMovie = contentType === 'movie';
+  const isSeries = contentType === 'series';
+  const isStreaming = isMovie || isSeries;
+
+  const activeSeason =
+    course.modules.find((m) => m.id === selectedSeasonId) ||
+    course.modules.find((m) => m.id === activeLesson?.moduleId) ||
+    course.modules[0] ||
+    null;
+
+  const renderSeriesSeasonsPanel = (maxHeightClass = 'max-h-[calc(100vh-255px)]') => (
+    <div className="flex flex-col">
+      {/* Seletor de Temporadas */}
+      <div className="p-3.5 border-b border-outline-variant/20 bg-surface-container/60 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-fuchsia-400 text-[17px]">live_tv</span>
+            <span>Temporadas ({course.modules.length})</span>
+          </span>
+          <span className="text-[11px] font-mono text-outline">
+            {course.lessonsCount} {course.lessonsCount === 1 ? 'episódio' : 'episódios'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {course.modules.map((season, sIdx) => {
+            const isSelected = activeSeason?.id === season.id;
+            return (
+              <button
+                key={season.id}
+                type="button"
+                onClick={() => setSelectedSeasonId(season.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-all border ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white border-transparent shadow'
+                    : 'bg-surface-container-low text-on-surface-variant border-outline-variant/25 hover:text-white hover:border-fuchsia-500/40'
+                }`}
+              >
+                {season.title || `Temporada ${sIdx + 1}`}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Lista de Episódios da Temporada Selecionada */}
+      <div className={`${maxHeightClass} overflow-y-auto divide-y divide-outline-variant/10`}>
+        {(activeSeason?.lessons || []).map((ep, epIdx) => {
+          const isActive = ep.id === activeLessonId;
+          const effectiveDuration =
+            isActive && liveDuration > 0 ? liveDuration : ep.durationSeconds;
+          const effectivePosition =
+            isActive && currentTime > 0
+              ? Math.max(currentTime, ep.lastPositionSeconds)
+              : ep.lastPositionSeconds;
+          const epProgress = ep.isCompleted
+            ? 100
+            : effectiveDuration > 0
+              ? Math.min(99, Math.round((effectivePosition / effectiveDuration) * 100))
+              : effectivePosition > 0
+                ? 15
+                : 0;
+
+          return (
+            <button
+              key={ep.id}
+              type="button"
+              onClick={() => selectLesson(ep.id, true)}
+              className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
+                isActive
+                  ? 'bg-fuchsia-500/15 border-l-2 border-fuchsia-400'
+                  : 'hover:bg-surface-container/60'
+              }`}
+            >
+              <LessonPlayProgressRing
+                progressPercent={epProgress}
+                isCompleted={ep.isCompleted}
+                isActive={isActive}
+                lessonType="video"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono font-bold text-fuchsia-300 shrink-0">
+                    E{String(epIdx + 1).padStart(2, '0')}
+                  </span>
+                  <span
+                    className={`text-xs leading-snug truncate ${
+                      isActive ? 'font-bold text-white' : 'font-medium text-on-surface-variant'
+                    }`}
+                  >
+                    {ep.title}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-outline">
+                  {effectiveDuration > 0 && <span>{formatDurationClock(effectiveDuration)}</span>}
+                  {!ep.isCompleted && epProgress > 0 && (
+                    <span className="text-rose-300">{epProgress}% assistido</span>
+                  )}
+                  {ep.isCompleted && <span className="text-emerald-400">Assistido</span>}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const handleOpenTutor = () => {
     const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
@@ -983,11 +1099,11 @@ function CoursePlayerContent() {
       <header className="sticky top-0 z-40 min-h-14 sm:h-16 py-2 sm:py-0 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/25 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link
-            href="/"
+            href={isStreaming ? '/?mode=streaming' : '/'}
             className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface-variant transition-colors shrink-0"
           >
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span className="hidden sm:inline">Biblioteca</span>
+            <span className="hidden sm:inline">{isStreaming ? 'Streaming' : 'Biblioteca'}</span>
           </Link>
 
           <div className="min-w-0">
@@ -995,17 +1111,42 @@ function CoursePlayerContent() {
               {course.title}
             </h1>
             <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono text-outline truncate">
-              <span>{course.progressPercent}%</span>
-              <span>·</span>
-              <span>
-                {course.completedLessonsCount}/{course.lessonsCount} aulas
-              </span>
-              {course.totalDurationSeconds > 0 && (
+              {isMovie ? (
                 <>
-                  <span className="hidden sm:inline">·</span>
-                  <span className="hidden sm:inline">
-                    {formatWatchTime(course.totalDurationSeconds)}
+                  <span className="text-rose-300 font-bold uppercase">Filme</span>
+                  {course.totalDurationSeconds > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{formatWatchTime(course.totalDurationSeconds)}</span>
+                    </>
+                  )}
+                </>
+              ) : isSeries ? (
+                <>
+                  <span className="text-fuchsia-300 font-bold uppercase">Série</span>
+                  <span>·</span>
+                  <span>
+                    {course.modulesCount}{' '}
+                    {course.modulesCount === 1 ? 'temporada' : 'temporadas'} ·{' '}
+                    {course.lessonsCount}{' '}
+                    {course.lessonsCount === 1 ? 'episódio' : 'episódios'}
                   </span>
+                </>
+              ) : (
+                <>
+                  <span>{course.progressPercent}%</span>
+                  <span>·</span>
+                  <span>
+                    {course.completedLessonsCount}/{course.lessonsCount} aulas
+                  </span>
+                  {course.totalDurationSeconds > 0 && (
+                    <>
+                      <span className="hidden sm:inline">·</span>
+                      <span className="hidden sm:inline">
+                        {formatWatchTime(course.totalDurationSeconds)}
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1013,20 +1154,22 @@ function CoursePlayerContent() {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <button
-            onClick={handleOpenTutor}
-            title="Abrir Tutor IA Gemini deste curso"
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-              sidebarTab === 'tutor' || tutorDrawerOpen
-                ? 'bg-secondary/20 text-secondary border-secondary/50'
-                : 'bg-secondary/10 hover:bg-secondary/20 text-secondary border-secondary/30'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
-            <span className="hidden xs:inline sm:inline">Tutor IA</span>
-          </button>
+          {!isStreaming && (
+            <button
+              onClick={handleOpenTutor}
+              title="Abrir Tutor IA Gemini deste curso"
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                sidebarTab === 'tutor' || tutorDrawerOpen
+                  ? 'bg-secondary/20 text-secondary border-secondary/50'
+                  : 'bg-secondary/10 hover:bg-secondary/20 text-secondary border-secondary/30'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+              <span className="hidden xs:inline sm:inline">Tutor IA</span>
+            </button>
+          )}
 
-          {!isYoutubeCourse && (
+          {!isYoutubeCourse && !isMovie && (
             <button
               onClick={() => setFileBrowserOpen(true)}
               disabled={attaching}
@@ -1043,7 +1186,7 @@ function CoursePlayerContent() {
           <button
             onClick={handleSyncCourse}
             disabled={syncing}
-            title="Sincronizar curso"
+            title="Sincronizar com o Google Drive"
             className="flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs text-on-surface transition-colors disabled:opacity-50"
           >
             <span
@@ -1056,7 +1199,7 @@ function CoursePlayerContent() {
 
           <button
             onClick={() => setEditModalOpen(true)}
-            title="Editar metadados do curso"
+            title="Editar capa e informações"
             className="p-1.5 sm:p-2 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-on-surface-variant"
           >
             <span className="material-symbols-outlined text-[16px]">edit</span>
@@ -1081,15 +1224,15 @@ function CoursePlayerContent() {
         </div>
       )}
 
-      {/* Workspace Principal: Player (Esquerda) + Grade de Módulos/Aulas ou Tutor IA (Direita) */}
+      {/* Workspace Principal: Molda-se para Curso, Filme (Cinema) ou Série (Temporadas) */}
       <div
         className={`flex-1 w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 transition-all ${
-          theaterMode ? 'max-w-[1920px]' : 'max-w-[1700px]'
+          isMovie ? 'max-w-[1360px]' : theaterMode ? 'max-w-[1920px]' : 'max-w-[1700px]'
         }`}
       >
-        {/* Área do Player + Materiais + Notas */}
+        {/* Área do Player + Controles */}
         <div
-          className={`${theaterMode ? 'lg:col-span-12' : 'lg:col-span-8'} flex flex-col gap-4 sm:gap-6 min-w-0 transition-all`}
+          className={`${isMovie || theaterMode ? 'lg:col-span-12' : 'lg:col-span-8'} flex flex-col gap-4 sm:gap-6 min-w-0 transition-all`}
         >
           {!activeLesson ? (
             <div className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low p-10 text-center">
@@ -1115,56 +1258,87 @@ function CoursePlayerContent() {
             </div>
           ) : (
             <>
-              {/* Cabeçalho Mobile acima do vídeo (Breadcrumb + Selo Aula + Navegação rápida) */}
+              {/* Cabeçalho Mobile acima do vídeo */}
               <div className="lg:hidden space-y-2.5">
                 <div className="text-[11px] font-mono text-outline truncate">
-                  <Link href="/" className="hover:text-on-surface">
-                    Início
+                  <Link
+                    href={isStreaming ? '/?mode=streaming' : '/'}
+                    className="hover:text-on-surface"
+                  >
+                    {isStreaming ? 'Streaming' : 'Início'}
                   </Link>{' '}
-                  / <span>{course.title}</span> /{' '}
-                  <span className="text-secondary">{activeLesson.moduleTitle}</span>
+                  / <span>{course.title}</span>
+                  {!isMovie && (
+                    <>
+                      {' '}
+                      /{' '}
+                      <span className={isSeries ? 'text-fuchsia-300' : 'text-secondary'}>
+                        {activeLesson.moduleTitle}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex items-start gap-2.5">
-                  <span className="px-2 py-1 rounded-md bg-primary/15 text-primary text-[10px] font-mono font-bold uppercase tracking-wider shrink-0 mt-0.5">
-                    AULA {String(activeLessonIndex + 1).padStart(2, '0')}
+                  <span
+                    className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider shrink-0 mt-0.5 ${
+                      isMovie
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : isSeries
+                          ? 'bg-fuchsia-500/20 text-fuchsia-300'
+                          : 'bg-primary/15 text-primary'
+                    }`}
+                  >
+                    {isMovie
+                      ? 'FILME'
+                      : isSeries
+                        ? `EP ${String(activeLessonIndex + 1).padStart(2, '0')}`
+                        : `AULA ${String(activeLessonIndex + 1).padStart(2, '0')}`}
                   </span>
                   <h2 className="text-lg font-extrabold text-white leading-snug break-words">
-                    {activeLesson.title}
+                    {isMovie ? course.title : activeLesson.title}
                   </h2>
                 </div>
 
-                <div className="flex items-center gap-2 pt-0.5">
-                  <button
-                    disabled={!prevLesson}
-                    onClick={() => prevLesson && selectLesson(prevLesson.id)}
-                    title="Aula anterior"
-                    className="h-9 w-9 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/25 flex items-center justify-center text-on-surface disabled:opacity-35 shrink-0"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-                  </button>
-                  <button
-                    disabled={!nextLesson}
-                    onClick={() => nextLesson && selectLesson(nextLesson.id)}
-                    className="h-9 px-4 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container text-xs font-bold flex items-center gap-1 disabled:opacity-35"
-                  >
-                    <span>Próxima aula</span>
-                    <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                  </button>
-                  <button
-                    onClick={handleToggleCompleted}
-                    className={`ml-auto h-9 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
-                      activeLesson.isCompleted
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                        : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {activeLesson.isCompleted ? 'check_circle' : 'radio_button_unchecked'}
-                    </span>
-                    <span>{activeLesson.isCompleted ? 'Concluída' : 'Concluir'}</span>
-                  </button>
-                </div>
+                {!isMovie && (
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <button
+                      disabled={!prevLesson}
+                      onClick={() => prevLesson && selectLesson(prevLesson.id)}
+                      title={isSeries ? 'Episódio anterior' : 'Aula anterior'}
+                      className="h-9 w-9 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/25 flex items-center justify-center text-on-surface disabled:opacity-35 shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                    </button>
+                    <button
+                      disabled={!nextLesson}
+                      onClick={() => nextLesson && selectLesson(nextLesson.id, isSeries)}
+                      className={`h-9 px-4 rounded-xl text-xs font-bold flex items-center gap-1 disabled:opacity-35 ${
+                        isSeries
+                          ? 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white'
+                          : 'bg-primary-container hover:bg-secondary-container text-on-primary-container'
+                      }`}
+                    >
+                      <span>{isSeries ? 'Próximo episódio' : 'Próxima aula'}</span>
+                      <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                    </button>
+                    {!isSeries && (
+                      <button
+                        onClick={handleToggleCompleted}
+                        className={`ml-auto h-9 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
+                          activeLesson.isCompleted
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                            : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          {activeLesson.isCompleted ? 'check_circle' : 'radio_button_unchecked'}
+                        </span>
+                        <span>{activeLesson.isCompleted ? 'Concluída' : 'Concluir'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Container de Mídia */}
@@ -1283,72 +1457,80 @@ function CoursePlayerContent() {
                 )}
               </div>
 
-              {/* Controles Mobile Enxutos (Autoplay + Ocultar concluídas + Velocidade horizontal) */}
+              {/* Controles Mobile Enxutos */}
               <div className="lg:hidden rounded-2xl bg-surface-container-low border border-outline-variant/25 p-3.5 space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  {(isVideoLesson(activeLesson) || isAudioLesson(activeLesson)) && (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={autoPlay}
-                      onClick={toggleAutoPlay}
-                      className="flex items-center gap-2 text-xs font-medium text-on-surface"
-                    >
-                      <span
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                          autoPlay ? 'bg-primary-container' : 'bg-outline-variant'
-                        }`}
+                {!isMovie && (
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    {(isVideoLesson(activeLesson) || isAudioLesson(activeLesson)) && (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={autoPlay}
+                        onClick={toggleAutoPlay}
+                        className="flex items-center gap-2 text-xs font-medium text-on-surface"
                       >
                         <span
-                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                            autoPlay ? 'translate-x-[18px]' : 'translate-x-1'
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            autoPlay ? 'bg-primary-container' : 'bg-outline-variant'
                           }`}
-                        />
-                      </span>
-                      <span>Autoplay</span>
-                    </button>
-                  )}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              autoPlay ? 'translate-x-[18px]' : 'translate-x-1'
+                            }`}
+                          />
+                        </span>
+                        <span>Autoplay</span>
+                      </button>
+                    )}
 
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={hideCompleted}
-                    onClick={toggleHideCompleted}
-                    className="flex items-center gap-2 text-xs font-medium text-on-surface-variant"
-                  >
-                    <span
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                        hideCompleted ? 'bg-secondary' : 'bg-outline-variant'
+                    {!isSeries && (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hideCompleted}
+                        onClick={toggleHideCompleted}
+                        className="flex items-center gap-2 text-xs font-medium text-on-surface-variant"
+                      >
+                        <span
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            hideCompleted ? 'bg-secondary' : 'bg-outline-variant'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              hideCompleted ? 'translate-x-[18px]' : 'translate-x-1'
+                            }`}
+                          />
+                        </span>
+                        <span>Ocultar concluídas</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={toggleTheaterMode}
+                      title={theaterMode ? 'Sair do modo teatro' : 'Ativar modo teatro'}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1 transition-all ${
+                        theaterMode
+                          ? 'bg-primary/15 text-primary border-primary/40'
+                          : 'bg-surface-container text-on-surface-variant border-outline-variant/25'
                       }`}
                     >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                          hideCompleted ? 'translate-x-[18px]' : 'translate-x-1'
-                        }`}
-                      />
-                    </span>
-                    <span>Ocultar concluídas</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={toggleTheaterMode}
-                    title={theaterMode ? 'Sair do modo teatro' : 'Ativar modo teatro'}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1 transition-all ${
-                      theaterMode
-                        ? 'bg-primary/15 text-primary border-primary/40'
-                        : 'bg-surface-container text-on-surface-variant border-outline-variant/25'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[15px]">
-                      {theaterMode ? 'right_panel_open' : 'width_wide'}
-                    </span>
-                    <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
-                  </button>
-                </div>
+                      <span className="material-symbols-outlined text-[15px]">
+                        {theaterMode ? 'right_panel_open' : 'width_wide'}
+                      </span>
+                      <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
+                    </button>
+                  </div>
+                )}
 
                 {isVideoLesson(activeLesson) && (
-                  <div className="flex items-center gap-2.5 pt-2.5 border-t border-outline-variant/20">
+                  <div
+                    className={`flex items-center gap-2.5 ${
+                      !isMovie ? 'pt-2.5 border-t border-outline-variant/20' : ''
+                    }`}
+                  >
                     <span className="text-xs text-outline shrink-0">Velocidade</span>
                     <div className="flex items-center gap-1 overflow-x-auto bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/20 flex-1">
                       {PLAYBACK_RATES.map((rate) => (
@@ -1357,7 +1539,9 @@ function CoursePlayerContent() {
                           onClick={() => setPlaybackRate(rate)}
                           className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-colors shrink-0 ${
                             playbackRate === rate
-                              ? 'bg-primary-container text-on-primary-container font-bold'
+                              ? isStreaming
+                                ? 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white font-bold'
+                                : 'bg-primary-container text-on-primary-container font-bold'
                               : 'text-on-surface-variant hover:text-on-surface'
                           }`}
                         >
@@ -1369,8 +1553,25 @@ function CoursePlayerContent() {
                 )}
               </div>
 
-              {/* Abas Segmentadas Mobile (Aulas | Tutor IA | Notas) — recolhidas no Modo Teatro */}
-              {!theaterMode && (
+              {/* Abas Mobile abaixo do vídeo: Curso (Aulas|Tutor|Notas), Série (Temporadas), Filme (Sinopse) */}
+              {!theaterMode && isMovie && course.description && (
+                <div className="lg:hidden rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 space-y-1.5">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-rose-300">
+                    Sinopse
+                  </span>
+                  <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    {course.description}
+                  </p>
+                </div>
+              )}
+
+              {!theaterMode && isSeries && (
+                <div className="lg:hidden rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden">
+                  {renderSeriesSeasonsPanel('max-h-[460px]')}
+                </div>
+              )}
+
+              {!theaterMode && !isStreaming && (
               <div className="lg:hidden space-y-3">
                 <div className="p-1 rounded-2xl bg-surface-container border border-outline-variant/25 grid grid-cols-3 gap-1">
                   <button
@@ -1438,33 +1639,52 @@ function CoursePlayerContent() {
               </div>
               )}
 
-              {/* Barra de Controles e Metadados da Aula (Desktop) */}
+              {/* Barra de Controles e Metadados (Desktop) */}
               <div className="hidden lg:flex rounded-2xl bg-surface-container-low border border-outline-variant/25 p-5 flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
                   <div className="min-w-0">
-                    <span className="text-[11px] sm:text-xs font-mono text-secondary uppercase tracking-wider">
-                      {activeLesson.moduleTitle}
+                    <span
+                      className={`text-[11px] sm:text-xs font-mono uppercase tracking-wider ${
+                        isMovie
+                          ? 'text-rose-300 font-bold'
+                          : isSeries
+                            ? 'text-fuchsia-300 font-bold'
+                            : 'text-secondary'
+                      }`}
+                    >
+                      {isMovie
+                        ? course.instructorName
+                          ? `FILME · ${course.instructorName}`
+                          : 'FILME'
+                        : activeLesson.moduleTitle}
                     </span>
                     <h2 className="text-lg sm:text-xl font-bold text-on-surface mt-0.5 break-words">
-                      {activeLesson.title}
+                      {isMovie ? course.title : activeLesson.title}
                     </h2>
+                    {isMovie && course.description && (
+                      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed max-w-3xl">
+                        {course.description}
+                      </p>
+                    )}
                   </div>
 
-                  <button
-                    onClick={handleToggleCompleted}
-                    className={`w-full sm:w-auto justify-center flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
-                      activeLesson.isCompleted
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                        : 'bg-surface-container hover:bg-surface-container-high text-on-surface border-outline-variant/30'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {activeLesson.isCompleted ? 'check_circle' : 'radio_button_unchecked'}
-                    </span>
-                    <span>
-                      {activeLesson.isCompleted ? 'Aula concluída' : 'Marcar como concluída'}
-                    </span>
-                  </button>
+                  {!isStreaming && (
+                    <button
+                      onClick={handleToggleCompleted}
+                      className={`w-full sm:w-auto justify-center flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                        activeLesson.isCompleted
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                          : 'bg-surface-container hover:bg-surface-container-high text-on-surface border-outline-variant/30'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {activeLesson.isCompleted ? 'check_circle' : 'radio_button_unchecked'}
+                      </span>
+                      <span>
+                        {activeLesson.isCompleted ? 'Aula concluída' : 'Marcar como concluída'}
+                      </span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Controles de Velocidade, PiP e Navegação */}
@@ -1479,7 +1699,9 @@ function CoursePlayerContent() {
                             onClick={() => setPlaybackRate(rate)}
                             className={`px-2 py-1 rounded-md text-xs font-mono transition-colors ${
                               playbackRate === rate
-                                ? 'bg-primary-container text-on-primary-container font-bold'
+                                ? isStreaming
+                                  ? 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white font-bold'
+                                  : 'bg-primary-container text-on-primary-container font-bold'
                                 : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
                             }`}
                           >
@@ -1501,13 +1723,17 @@ function CoursePlayerContent() {
                       </>
                     )}
 
-                    {(isVideoLesson(activeLesson) || isAudioLesson(activeLesson)) && (
+                    {!isMovie && (isVideoLesson(activeLesson) || isAudioLesson(activeLesson)) && (
                       <button
                         type="button"
                         role="switch"
                         aria-checked={autoPlay}
                         onClick={toggleAutoPlay}
-                        title="Avançar automaticamente para a próxima aula ao finalizar"
+                        title={
+                          isSeries
+                            ? 'Avançar automaticamente para o próximo episódio'
+                            : 'Avançar automaticamente para a próxima aula ao finalizar'
+                        }
                         className={`ml-1 px-2.5 py-1 rounded-md text-xs font-medium border flex items-center gap-2 transition-all ${
                           autoPlay
                             ? 'bg-secondary/15 text-secondary border-secondary/40'
@@ -1529,25 +1755,27 @@ function CoursePlayerContent() {
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={toggleTheaterMode}
-                      title={
-                        theaterMode
-                          ? 'Sair do modo teatro e mostrar aulas (Tecla T)'
-                          : 'Modo teatro: expandir vídeo e recolher próximos títulos (Tecla T)'
-                      }
-                      className={`flex ml-1 px-2.5 py-1 rounded-md text-xs font-medium border items-center gap-1.5 transition-all ${
-                        theaterMode
-                          ? 'bg-primary/15 text-primary border-primary/40'
-                          : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant border-outline-variant/25'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[15px]">
-                        {theaterMode ? 'right_panel_open' : 'width_wide'}
-                      </span>
-                      <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
-                    </button>
+                    {!isMovie && (
+                      <button
+                        type="button"
+                        onClick={toggleTheaterMode}
+                        title={
+                          theaterMode
+                            ? 'Sair do modo teatro (Tecla T)'
+                            : 'Modo teatro: expandir vídeo (Tecla T)'
+                        }
+                        className={`flex ml-1 px-2.5 py-1 rounded-md text-xs font-medium border items-center gap-1.5 transition-all ${
+                          theaterMode
+                            ? 'bg-primary/15 text-primary border-primary/40'
+                            : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant border-outline-variant/25'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          {theaterMode ? 'right_panel_open' : 'width_wide'}
+                        </span>
+                        <span>{theaterMode ? 'Sair do teatro' : 'Teatro'}</span>
+                      </button>
+                    )}
 
                     {!isYoutubeLesson(activeLesson) && activeLesson.driveFileId && (
                       <a
@@ -1560,29 +1788,35 @@ function CoursePlayerContent() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button
-                      disabled={!prevLesson}
-                      onClick={() => prevLesson && selectLesson(prevLesson.id)}
-                      className="flex-1 sm:flex-none justify-center flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface disabled:opacity-35"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">skip_previous</span>
-                      <span>Anterior</span>
-                    </button>
-                    <button
-                      disabled={!nextLesson}
-                      onClick={() => nextLesson && selectLesson(nextLesson.id)}
-                      className="flex-1 sm:flex-none justify-center flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-primary-container hover:bg-secondary-container text-xs font-semibold text-on-primary-container disabled:opacity-35"
-                    >
-                      <span>Próxima</span>
-                      <span className="material-symbols-outlined text-[16px]">skip_next</span>
-                    </button>
-                  </div>
+                  {!isMovie && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        disabled={!prevLesson}
+                        onClick={() => prevLesson && selectLesson(prevLesson.id)}
+                        className="flex-1 sm:flex-none justify-center flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs text-on-surface disabled:opacity-35"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">skip_previous</span>
+                        <span>Anterior</span>
+                      </button>
+                      <button
+                        disabled={!nextLesson}
+                        onClick={() => nextLesson && selectLesson(nextLesson.id, isSeries)}
+                        className={`flex-1 sm:flex-none justify-center flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold disabled:opacity-35 ${
+                          isSeries
+                            ? 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white'
+                            : 'bg-primary-container hover:bg-secondary-container text-on-primary-container'
+                        }`}
+                      >
+                        <span>{isSeries ? 'Próximo' : 'Próxima'}</span>
+                        <span className="material-symbols-outlined text-[16px]">skip_next</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Materiais de Apoio da Aula (com leitor lateral para PDF/Word/Imagem no desktop ao clicar) */}
-              {activeLesson.resources.length > 0 && (
+              {/* Materiais de Apoio (somente modo Curso) */}
+              {!isStreaming && activeLesson.resources.length > 0 && (
                 <div
                   className={`${
                     !theaterMode && mobileTab === 'notes' ? 'block' : 'hidden lg:block'
@@ -1741,7 +1975,8 @@ function CoursePlayerContent() {
                 </div>
               )}
 
-              {/* Anotações da Aula com Timestamp */}
+              {/* Anotações da Aula com Timestamp (somente modo Curso) */}
+              {!isStreaming && (
               <div
                 className={`${
                   !theaterMode && mobileTab === 'notes' ? 'block' : 'hidden lg:block'
@@ -1818,14 +2053,19 @@ function CoursePlayerContent() {
                   </div>
                 )}
               </div>
+              )}
             </>
           )}
         </div>
 
-        {/* Sidebar de Conteúdo Desktop (Módulos/Aulas + Tutor IA Gemini) — recolhida no Modo Teatro */}
-        {!theaterMode && (
+        {/* Sidebar Desktop: Temporadas/Episódios (Série) ou Módulos/Aulas + Tutor IA (Curso). Oculta em Filmes e no Modo Teatro */}
+        {!theaterMode && !isMovie && (
           <aside className="hidden lg:block lg:col-span-4 min-w-0">
             <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden lg:sticky lg:top-20 flex flex-col">
+              {isSeries ? (
+                renderSeriesSeasonsPanel('max-h-[calc(100vh-235px)]')
+              ) : (
+              <>
               {/* Abas: Aulas | Tutor Gemini */}
               <div className="grid grid-cols-2 border-b border-outline-variant/20 bg-surface-container/70">
                 <button
@@ -1895,6 +2135,8 @@ function CoursePlayerContent() {
                     {renderCurriculumTree()}
                   </div>
                 </>
+              )}
+              </>
               )}
             </div>
           </aside>

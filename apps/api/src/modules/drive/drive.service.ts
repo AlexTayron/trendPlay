@@ -12,6 +12,7 @@ import type { Request, Response } from 'express';
 import pg from 'pg';
 import { drive_v3, google } from 'googleapis';
 import {
+  ContentType,
   DriveConnectionStatus,
   DriveFileEntry,
   DriveFolderListResponse,
@@ -25,6 +26,24 @@ import { YoutubeService } from '../youtube/youtube.service.js';
 import { TokenCryptoService } from '../../common/crypto/token-crypto.service.js';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
+const MOVIE_MIME = 'application/vnd.devcore.movie';
+const SERIES_MIME = 'application/vnd.devcore.series';
+
+function extractSeasonNumber(name: string): number | null {
+  const sxe = name.match(/(?:^|[\s._-])(?:s|t)(\d{1,2})\s*e\d{1,3}/i);
+  if (sxe?.[1]) return Number(sxe[1]);
+  const xPat = name.match(/(?:^|[\s._-])(\d{1,2})x\d{1,3}(?:$|[\s._-])/i);
+  if (xPat?.[1]) return Number(xPat[1]);
+  const word = name.match(/(?:temporada|season)\s*0*(\d{1,2})/i);
+  if (word?.[1]) return Number(word[1]);
+  return null;
+}
+
+function contentTypeToSourceMime(contentType: ContentType): string {
+  if (contentType === 'movie') return MOVIE_MIME;
+  if (contentType === 'series') return SERIES_MIME;
+  return FOLDER_MIME;
+}
 
 interface DriveItem {
   id: string;
@@ -558,37 +577,182 @@ export class DriveService {
   }
 
   /**
-   * Importa em lote todas as subpastas de uma pasta raiz organizada de cursos.
-   * Cada subpasta direta dentro da pasta raiz vira um Curso completo na plataforma.
+   * Importa em lote todas as subpastas (e no modo Streaming também vídeos soltos)
+   * de uma pasta raiz organizada no Google Drive.
    */
   async importRootCoursesFolder(
     userId: string,
     rootFolderId: string,
+    contentType: ContentType | 'auto' = 'course',
   ): Promise<ImportRootFolderResult> {
-    const listing = await this.listDriveFolders(userId, rootFolderId);
+    if (contentType === 'course') {
+      const listing = await this.listDriveFolders(userId, rootFolderId);
 
-    if (listing.folders.length === 0) {
+      if (listing.folders.length === 0) {
+        throw new BadRequestException(
+          `Nenhuma subpasta de curso encontrada dentro de "${listing.parentName}". Se esta pasta já é um curso único, use "Importar esta pasta".`,
+        );
+      }
+
+      const courses: ImportDriveFolderResult[] = [];
+      for (const folder of listing.folders) {
+        const imported = await this.importCourseFolder(userId, {
+          folderId: folder.id,
+          folderName: folder.name,
+          contentType: 'course',
+        });
+        courses.push(imported);
+      }
+
+      return {
+        rootFolderName: listing.parentName,
+        coursesImported: courses.length,
+        totalModules: courses.reduce((sum, c) => sum + c.modulesCount, 0),
+        totalLessons: courses.reduce((sum, c) => sum + c.lessonsCount, 0),
+        courses,
+      };
+    }
+
+    // Modo Streaming: importa subpastas (Filmes/Séries) e também vídeos soltos diretamente como Filmes
+    const items = await this.listDriveItems(userId, rootFolderId);
+    const looseVideos = items.files.filter((f) => classifyDriveItem(f.mimeType, f.name) === 'video');
+
+    if (items.folders.length === 0 && looseVideos.length === 0) {
       throw new BadRequestException(
-        `Nenhuma subpasta de curso encontrada dentro de "${listing.parentName}". Se esta pasta já é um curso único, use "Importar como Curso".`,
+        `Nenhuma pasta ou arquivo de vídeo encontrado dentro de "${items.parentName}".`,
       );
     }
 
-    const courses: ImportDriveFolderResult[] = [];
-    for (const folder of listing.folders) {
+    const importedAll: ImportDriveFolderResult[] = [];
+    for (const folder of items.folders) {
       const imported = await this.importCourseFolder(userId, {
         folderId: folder.id,
         folderName: folder.name,
+        contentType,
       });
-      courses.push(imported);
+      importedAll.push(imported);
+    }
+
+    for (const video of looseVideos) {
+      const imported = await this.importMovieFile(userId, {
+        fileId: video.id,
+        fileName: video.name,
+      });
+      importedAll.push(imported);
     }
 
     return {
-      rootFolderName: listing.parentName,
-      coursesImported: courses.length,
-      totalModules: courses.reduce((sum, c) => sum + c.modulesCount, 0),
-      totalLessons: courses.reduce((sum, c) => sum + c.lessonsCount, 0),
-      courses,
+      rootFolderName: items.parentName,
+      coursesImported: importedAll.length,
+      totalModules: importedAll.reduce((sum, c) => sum + c.modulesCount, 0),
+      totalLessons: importedAll.reduce((sum, c) => sum + c.lessonsCount, 0),
+      courses: importedAll,
     };
+  }
+
+  /**
+   * Importa um único arquivo de vídeo do Google Drive diretamente como Filme (modo Streaming).
+   */
+  async importMovieFile(
+    userId: string,
+    params: { fileId: string; fileName?: string },
+  ): Promise<ImportDriveFolderResult> {
+    const cleanFileId = extractDriveId(params.fileId);
+    if (!cleanFileId) {
+      throw new BadRequestException('Informe o ID ou link do arquivo de vídeo no Google Drive.');
+    }
+
+    await this.setSyncState(userId, 'syncing', null, false);
+
+    try {
+      const { accessToken } = await this.getValidAccessToken(userId);
+      const drive = this.createDriveClient(accessToken);
+
+      const meta = await drive.files.get({
+        fileId: cleanFileId,
+        fields:
+          'id, name, mimeType, size, md5Checksum, modifiedTime, parents, videoMediaMetadata(durationMillis)',
+        supportsAllDrives: true,
+      });
+
+      const d = meta.data;
+      if (!d.id || !d.name || !d.mimeType) {
+        throw new BadRequestException('Arquivo não encontrado no Google Drive.');
+      }
+
+      if (d.mimeType === FOLDER_MIME) {
+        return this.importCourseFolder(userId, {
+          folderId: d.id,
+          folderName: d.name,
+          contentType: 'auto',
+        });
+      }
+
+      const category = classifyDriveItem(d.mimeType, d.name);
+      if (category !== 'video' && category !== 'audio') {
+        throw new BadRequestException(
+          'Selecione um arquivo de vídeo (MP4, MKV, WebM, MOV) para importar como filme.',
+        );
+      }
+
+      const title = stripExtension(params.fileName?.trim() || d.name) || 'Filme do Google Drive';
+      const parentId = d.parents?.[0] || null;
+      const durationSeconds = Math.round(Number(d.videoMediaMetadata?.durationMillis || 0) / 1000);
+
+      const movieFiles: Array<DriveItem & { displayTitle: string }> = [
+        {
+          id: d.id,
+          name: d.name,
+          mimeType: d.mimeType,
+          size: Number(d.size || 0),
+          md5Checksum: d.md5Checksum || null,
+          modifiedTime: d.modifiedTime || null,
+          parentId,
+          durationSeconds,
+          displayTitle: title,
+        },
+      ];
+
+      // Se existir legenda (.srt/.vtt) com o mesmo nome na pasta pai, vincula automaticamente
+      if (parentId) {
+        try {
+          const siblings = await this.listFolderChildren(drive, parentId);
+          const movieStem = normalizeStem(d.name);
+          for (const sib of siblings) {
+            if (sib.id === d.id) continue;
+            if (classifyDriveItem(sib.mimeType, sib.name) === 'transcript') {
+              const sibStem = normalizeStem(sib.name);
+              if (sibStem === movieStem || sibStem.includes(movieStem) || movieStem.includes(sibStem)) {
+                movieFiles.push({ ...sib, displayTitle: stripExtension(sib.name) });
+              }
+            }
+          }
+        } catch {
+          // Ignora se não puder listar pasta pai (ex.: escopo drive.file)
+        }
+      }
+
+      const result = await this.persistCourseStructure(userId, {
+        folderId: `movie:${cleanFileId}`,
+        folderName: title,
+        folderParentId: parentId,
+        contentType: 'movie',
+        moduleBuckets: [
+          {
+            driveFolderId: null,
+            title: 'Filme',
+            files: movieFiles,
+          },
+        ],
+      });
+
+      await this.setSyncState(userId, 'idle', null, true);
+      return result;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro ao importar filme do Drive.';
+      await this.setSyncState(userId, 'error', msg, false);
+      throw error;
+    }
   }
 
   private async listFolderChildren(drive: drive_v3.Drive, folderId: string): Promise<DriveItem[]> {
@@ -802,6 +966,7 @@ export class DriveService {
     params: {
       folderId: string;
       folderName?: string;
+      contentType?: ContentType | 'auto';
       selectedFiles?: PickedDriveFileInput[];
     },
   ): Promise<ImportDriveFolderResult> {
@@ -877,12 +1042,73 @@ export class DriveService {
         }
       }
 
+      const directVideoCount = directFiles.filter(
+        (f) => classifyDriveItem(f.mimeType, f.name) === 'video',
+      ).length;
+
+      const requestedType = params.contentType || 'course';
+      const resolvedContentType: ContentType =
+        requestedType === 'auto'
+          ? subfolders.length === 0 && directVideoCount <= 1
+            ? 'movie'
+            : 'series'
+          : requestedType;
+
       if (directFiles.length > 0) {
-        moduleBuckets.push({
-          driveFolderId: null,
-          title: subfolders.length > 0 ? '00 — Introdução e Materiais Gerais' : 'Módulo 01 — Aulas do Curso',
-          files: directFiles,
-        });
+        if (resolvedContentType === 'series' && subfolders.length === 0) {
+          // Agrupa automaticamente episódios soltos por Temporada (ex.: S01E01, 1x02, Temporada 2)
+          const seasonGroups = new Map<number, Array<DriveItem & { displayTitle: string }>>();
+          const ungrouped: Array<DriveItem & { displayTitle: string }> = [];
+
+          for (const f of directFiles) {
+            const seasonNum = extractSeasonNumber(f.name);
+            if (seasonNum !== null && seasonNum > 0) {
+              const arr = seasonGroups.get(seasonNum) || [];
+              arr.push(f);
+              seasonGroups.set(seasonNum, arr);
+            } else {
+              ungrouped.push(f);
+            }
+          }
+
+          if (seasonGroups.size > 0) {
+            const sortedSeasons = Array.from(seasonGroups.keys()).sort((a, b) => a - b);
+            for (const sNum of sortedSeasons) {
+              const sFiles = seasonGroups.get(sNum) || [];
+              moduleBuckets.push({
+                driveFolderId: null,
+                title: `Temporada ${String(sNum).padStart(2, '0')}`,
+                files: sFiles,
+              });
+            }
+            if (ungrouped.length > 0) {
+              moduleBuckets[0]?.files.push(...ungrouped);
+            }
+          } else {
+            moduleBuckets.push({
+              driveFolderId: null,
+              title: 'Temporada 01',
+              files: directFiles,
+            });
+          }
+        } else {
+          const defaultBucketTitle =
+            resolvedContentType === 'movie'
+              ? 'Filme'
+              : resolvedContentType === 'series'
+                ? subfolders.length > 0
+                  ? 'Extras e Especiais'
+                  : 'Temporada 01'
+                : subfolders.length > 0
+                  ? '00 — Introdução e Materiais Gerais'
+                  : 'Módulo 01 — Aulas do Curso';
+
+          moduleBuckets.push({
+            driveFolderId: null,
+            title: defaultBucketTitle,
+            files: directFiles,
+          });
+        }
       }
 
       for (const folder of subfolders) {
@@ -935,6 +1161,7 @@ export class DriveService {
         folderId: cleanFolderId,
         folderName,
         folderParentId,
+        contentType: resolvedContentType,
         coverImageItem,
         moduleBuckets,
       });
@@ -964,6 +1191,7 @@ export class DriveService {
       folderId: string;
       folderName: string;
       folderParentId: string | null;
+      contentType?: ContentType;
       coverImageItem?: DriveItem | null;
       moduleBuckets: Array<{
         driveFolderId: string | null;
@@ -972,6 +1200,8 @@ export class DriveService {
       }>;
     },
   ): Promise<Omit<ImportDriveFolderResult, 'warning'>> {
+    const contentType: ContentType = payload.contentType || 'course';
+    const sourceMime = contentTypeToSourceMime(contentType);
     const client = await this.pgPool.connect();
     try {
       await client.query('BEGIN');
@@ -980,8 +1210,8 @@ export class DriveService {
       const courseDriveSourceId = await this.upsertDriveSource(client, userId, {
         driveFileId: payload.folderId,
         name: payload.folderName,
-        mimeType: FOLDER_MIME,
-        isFolder: true,
+        mimeType: sourceMime,
+        isFolder: contentType !== 'movie' || !payload.folderId.startsWith('movie:'),
         parentDriveId: payload.folderParentId,
       });
 
@@ -1266,6 +1496,7 @@ export class DriveService {
       return {
         courseId,
         title: courseTitle,
+        contentType,
         modulesCount,
         lessonsCount,
         documentsCount,
@@ -1279,11 +1510,12 @@ export class DriveService {
   }
 
   /**
-   * Re-sincroniza um curso já importado usando sua pasta vinculada no Drive.
+   * Re-sincroniza um curso, filme ou série já importado usando sua fonte vinculada no Drive.
    */
   async syncCourse(userId: string, courseId: string): Promise<ImportDriveFolderResult> {
     const client = await this.pgPool.connect();
     let folderId: string | null = null;
+    let sourceMime: string | null = null;
     let courseTitle: string;
 
     try {
@@ -1292,7 +1524,7 @@ export class DriveService {
 
       const res = await client.query(
         `
-        SELECT c.title, ds.drive_file_id AS "driveFileId"
+        SELECT c.title, ds.drive_file_id AS "driveFileId", ds.mime_type AS "mimeType"
           FROM courses c
           LEFT JOIN drive_sources ds ON ds.id = c.drive_source_id AND ds.user_id = c.user_id
          WHERE c.id = $1 AND c.user_id = app_user_id();
@@ -1303,11 +1535,12 @@ export class DriveService {
       await client.query('COMMIT');
 
       if (res.rows.length === 0) {
-        throw new NotFoundException('Curso não encontrado.');
+        throw new NotFoundException('Conteúdo não encontrado.');
       }
 
       courseTitle = res.rows[0].title;
       folderId = res.rows[0].driveFileId;
+      sourceMime = res.rows[0].mimeType;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
@@ -1316,14 +1549,28 @@ export class DriveService {
     }
 
     if (!folderId) {
-      throw new BadRequestException('Este curso não possui uma fonte vinculada para sincronização.');
+      throw new BadRequestException('Este item não possui uma fonte vinculada para sincronização.');
     }
 
     if (folderId.startsWith('yt:playlist:')) {
       return this.youtubeService.syncCourse(userId, courseId);
     }
 
-    return this.importCourseFolder(userId, { folderId, folderName: courseTitle });
+    if (folderId.startsWith('movie:')) {
+      return this.importMovieFile(userId, {
+        fileId: folderId.slice('movie:'.length),
+        fileName: courseTitle,
+      });
+    }
+
+    const preservedType: ContentType =
+      sourceMime === MOVIE_MIME ? 'movie' : sourceMime === SERIES_MIME ? 'series' : 'course';
+
+    return this.importCourseFolder(userId, {
+      folderId,
+      folderName: courseTitle,
+      contentType: preservedType,
+    });
   }
 
   /**

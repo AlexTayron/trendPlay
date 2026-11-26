@@ -1,5 +1,6 @@
 import type {
   AuthConfigStatus,
+  ContentType,
   CourseDetail,
   CourseSummary,
   DashboardOverview,
@@ -101,6 +102,7 @@ export function updateCourse(
     description?: string;
     instructorName?: string;
     thumbnailUrl?: string | null;
+    contentType?: ContentType;
   },
 ): Promise<CourseSummary> {
   return apiFetch<CourseSummary>(`/learning/courses/${encodeURIComponent(courseId)}`, {
@@ -134,6 +136,7 @@ export function listDriveItems(parentId = 'root'): Promise<DriveItemsListRespons
 export function importDriveFolder(payload: {
   folderId: string;
   folderName?: string;
+  contentType?: ContentType | 'auto';
   selectedFiles?: Array<{ id: string; name: string; mimeType?: string }>;
 }): Promise<ImportDriveFolderResult> {
   return apiFetch<ImportDriveFolderResult>('/drive/courses/import', {
@@ -142,12 +145,23 @@ export function importDriveFolder(payload: {
   });
 }
 
+export function importDriveMovieFile(payload: {
+  fileId: string;
+  fileName?: string;
+}): Promise<ImportDriveFolderResult> {
+  return apiFetch<ImportDriveFolderResult>('/drive/streaming/import-file', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function importRootCoursesFolder(
   folderId: string,
+  contentType: ContentType | 'auto' = 'course',
 ): Promise<ImportRootFolderResult> {
   return apiFetch<ImportRootFolderResult>('/drive/courses/import-root', {
     method: 'POST',
-    body: JSON.stringify({ folderId }),
+    body: JSON.stringify({ folderId, contentType }),
   });
 }
 

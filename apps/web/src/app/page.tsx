@@ -22,6 +22,8 @@ import {
 } from '../lib/api';
 import { openDriveFolderPicker } from '../lib/google-picker';
 import { DriveFolderBrowserModal } from '../components/DriveFolderBrowserModal';
+import { DriveStreamingBrowserModal } from '../components/DriveStreamingBrowserModal';
+import { StreamingDashboardView } from '../components/StreamingDashboardView';
 import { YouTubeImportModal } from '../components/YouTubeImportModal';
 import { CourseEditModal } from '../components/CourseEditModal';
 import {
@@ -38,9 +40,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [unauthenticated, setUnauthenticated] = useState(false);
 
+  const [platformMode, setPlatformMode] = useState<'courses' | 'streaming'>('courses');
   const [searchQuery, setSearchQuery] = useState('');
   const [importing, setImporting] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [streamingBrowserOpen, setStreamingBrowserOpen] = useState(false);
   const [ytModalOpen, setYtModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<CourseSummary | null>(null);
   const [syncingCourseId, setSyncingCourseId] = useState<string | null>(null);
@@ -89,8 +93,39 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const switchPlatformMode = (next: 'courses' | 'streaming') => {
+    setPlatformMode(next);
+    setSearchQuery('');
+    try {
+      window.localStorage.setItem('devcore_platform_mode', next);
+      const url = next === 'streaming' ? '/?mode=streaming' : '/';
+      window.history.replaceState(null, '', url);
+    } catch {
+      // ignora
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const modeParam = params.get('mode');
+    if (modeParam === 'streaming' || modeParam === 'courses') {
+      setPlatformMode(modeParam);
+      try {
+        window.localStorage.setItem('devcore_platform_mode', modeParam);
+      } catch {
+        // ignora
+      }
+    } else {
+      try {
+        const savedMode = window.localStorage.getItem('devcore_platform_mode');
+        if (savedMode === 'streaming') {
+          setPlatformMode('streaming');
+        }
+      } catch {
+        // ignora
+      }
+    }
+
     const authError = params.get('auth_error');
     const driveConnected = params.get('drive_connected');
     if (authError) {
@@ -231,23 +266,53 @@ export default function DashboardPage() {
     }
   };
 
+  const handleStreamingItemImported = async (result: ImportDriveFolderResult) => {
+    const label = result.contentType === 'series' ? 'Série' : 'Filme';
+    setBanner({
+      type: result.warning ? 'warning' : 'success',
+      text:
+        result.warning ||
+        (result.contentType === 'series'
+          ? `${label} "${result.title}" adicionada com ${result.modulesCount} temporada(s) e ${result.lessonsCount} episódio(s)!`
+          : `${label} "${result.title}" adicionado ao seu catálogo de Streaming!`),
+    });
+    await loadData();
+  };
+
+  const handleStreamingRootImported = async (result: ImportRootFolderResult) => {
+    setBanner({
+      type: 'success',
+      text: `Pasta "${result.rootFolderName}" importada: ${result.coursesImported} título(s) adicionados ao Streaming!`,
+    });
+    await loadData();
+  };
+
   const handleLogout = async () => {
     await logout().catch(() => undefined);
     setDashboard(null);
     setUnauthenticated(true);
   };
 
+  const courseItems = useMemo(
+    () => (dashboard ? dashboard.courses.filter((c) => (c.contentType || 'course') === 'course') : []),
+    [dashboard],
+  );
+
+  const streamingItems = useMemo(
+    () => (dashboard ? dashboard.courses.filter((c) => c.contentType === 'movie' || c.contentType === 'series') : []),
+    [dashboard],
+  );
+
   const filteredCourses = useMemo(() => {
-    if (!dashboard) return [];
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return dashboard.courses;
-    return dashboard.courses.filter(
+    if (!q) return courseItems;
+    return courseItems.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         (c.instructorName || '').toLowerCase().includes(q) ||
         (c.description || '').toLowerCase().includes(q),
     );
-  }, [dashboard, searchQuery]);
+  }, [courseItems, searchQuery]);
 
   const greetingDate = useMemo(() => getFormattedDatePtBr(), []);
   const greetingText = useMemo(() => getGreetingPtBr(), []);
@@ -257,32 +322,75 @@ export default function DashboardPage() {
       {/* Header Fixo */}
       <header className="fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-outline-variant/20 shadow-lg">
         <div className="h-14 sm:h-16 w-full max-w-[1600px] mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+          <div className="flex items-center gap-2.5 sm:gap-5 min-w-0">
             <Link href="/" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <span className="material-symbols-outlined text-primary text-[24px] sm:text-[28px]">terminal</span>
-              <span className="text-lg sm:text-xl font-bold tracking-tight text-on-surface">DevCore</span>
-            </Link>
-            <nav className="hidden md:flex items-center gap-4 h-16">
-              <Link
-                href="/"
-                className="h-full flex items-center px-2 text-on-surface font-medium border-b-2 border-primary"
+              <span
+                className={`material-symbols-outlined text-[24px] sm:text-[28px] transition-colors ${
+                  dashboard && platformMode === 'streaming' ? 'text-fuchsia-400' : 'text-primary'
+                }`}
               >
-                Biblioteca
-              </Link>
-            </nav>
+                {dashboard && platformMode === 'streaming' ? 'movie' : 'terminal'}
+              </span>
+              <span className="text-base sm:text-xl font-bold tracking-tight text-on-surface">
+                DevCore
+              </span>
+            </Link>
+
+            {dashboard && (
+              <div
+                role="tablist"
+                aria-label="Alternar modo da plataforma"
+                className="flex items-center p-0.5 sm:p-1 rounded-xl bg-surface-container-low border border-outline-variant/25"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={platformMode === 'courses'}
+                  onClick={() => switchPlatformMode('courses')}
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all ${
+                    platformMode === 'courses'
+                      ? 'bg-primary-container text-on-primary-container shadow'
+                      : 'text-outline hover:text-on-surface'
+                  }`}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                    school
+                  </span>
+                  <span>Cursos</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={platformMode === 'streaming'}
+                  onClick={() => switchPlatformMode('streaming')}
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all ${
+                    platformMode === 'streaming'
+                      ? 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white shadow'
+                      : 'text-outline hover:text-on-surface'
+                  }`}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                    live_tv
+                  </span>
+                  <span>Streaming</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {dashboard && (
               <div className="relative hidden sm:flex items-center bg-surface-container-low px-3 py-1.5 rounded-lg w-48 md:w-64 border border-outline-variant/30 text-outline focus-within:border-primary/60">
                 <span className="material-symbols-outlined text-[18px] mr-2">search</span>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filtrar cursos..."
-                  className="bg-transparent text-xs text-on-surface placeholder:text-outline focus:outline-none w-full"
-                />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={
+                      platformMode === 'streaming' ? 'Filtrar filmes e séries...' : 'Filtrar cursos...'
+                    }
+                    className="bg-transparent text-xs text-on-surface placeholder:text-outline focus:outline-none w-full"
+                  />
               </div>
             )}
 
@@ -434,9 +542,11 @@ export default function DashboardPage() {
 
                   <p className="text-slate-300 mt-5 text-sm sm:text-base lg:text-[17px] leading-relaxed max-w-2xl">
                     Transforme suas pastas do <strong className="text-white">Google Drive</strong> e
-                    playlists do <strong className="text-white">YouTube</strong> em um ambiente
-                    organizado de estudos — com player dedicado, leitor de PDF/Word/imagens,
-                    anotações por minuto e Tutor IA Gemini que entende cada curso.
+                    playlists do <strong className="text-white">YouTube</strong> em uma plataforma
+                    que se adapta ao que você quer ver — modo <strong className="text-primary">Cursos</strong>{' '}
+                    (com Tutor IA Gemini, anotações e leitor PDF/Word) e modo{' '}
+                    <strong className="text-fuchsia-300">Streaming</strong> (para seus Filmes e
+                    Séries por temporadas).
                   </p>
 
                   {/* CTA Principal — Login Exclusivo Google */}
@@ -655,8 +765,22 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Dashboard Autenticado */}
-        {dashboard && (
+        {/* Dashboard Autenticado — Molda-se entre Cursos e Streaming */}
+        {dashboard && platformMode === 'streaming' && (
+          <StreamingDashboardView
+            items={streamingItems}
+            continueWatching={dashboard.streamingContinueWatching ?? null}
+            driveConnected={dashboard.drive.connected}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            syncingId={syncingCourseId}
+            onOpenStreamingBrowser={() => setStreamingBrowserOpen(true)}
+            onSyncItem={handleSyncCourse}
+            onEditItem={(item) => setEditingCourse(item)}
+          />
+        )}
+
+        {dashboard && platformMode === 'courses' && (
           <>
             {/* Hero Banner + 4 Stat Cards Reais */}
             <section className="w-full mt-4 mb-8">
@@ -1154,6 +1278,13 @@ export default function DashboardPage() {
           onCourseImported={handleCourseImported}
           onRootImported={handleRootImported}
           onFallbackPicker={handleOpenFolderPicker}
+        />
+
+        <DriveStreamingBrowserModal
+          open={streamingBrowserOpen}
+          onClose={() => setStreamingBrowserOpen(false)}
+          onItemImported={handleStreamingItemImported}
+          onRootImported={handleStreamingRootImported}
         />
 
         <CourseEditModal

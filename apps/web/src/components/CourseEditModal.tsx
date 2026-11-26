@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { CourseSummary } from '@devcore/shared';
+import type { ContentType, CourseSummary } from '@devcore/shared';
 import { resolveThumbnailUrl, updateCourse } from '../lib/api';
 
 interface EditableCourse {
   id: string;
   title: string;
+  contentType?: ContentType;
   instructorName?: string | null;
   description?: string | null;
   thumbnailUrl?: string | null;
@@ -79,6 +80,7 @@ export function CourseEditModal({ course, onClose, onSaved }: CourseEditModalPro
   const [title, setTitle] = useState('');
   const [instructor, setInstructor] = useState('');
   const [description, setDescription] = useState('');
+  const [contentType, setContentType] = useState<ContentType>('course');
   const [thumbnailValue, setThumbnailValue] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [processingImg, setProcessingImg] = useState(false);
@@ -92,6 +94,7 @@ export function CourseEditModal({ course, onClose, onSaved }: CourseEditModalPro
     setTitle(course.title || '');
     setInstructor(course.instructorName || '');
     setDescription(course.description || '');
+    setContentType(course.contentType || 'course');
     const initialThumb = course.thumbnailUrl || '';
     setThumbnailValue(initialThumb);
     setUrlInput(/^https?:\/\//i.test(initialThumb) ? initialThumb : '');
@@ -147,6 +150,7 @@ export function CourseEditModal({ course, onClose, onSaved }: CourseEditModalPro
         instructorName: instructor,
         description,
         thumbnailUrl: thumbnailValue,
+        contentType: course.sourceType === 'youtube' ? undefined : contentType,
       });
       onSaved(updated);
       onClose();
@@ -303,6 +307,39 @@ export function CourseEditModal({ course, onClose, onSaved }: CourseEditModalPro
           </div>
         )}
 
+        {course.sourceType !== 'youtube' && (
+          <div>
+            <label className="block text-xs text-on-surface-variant mb-1.5">Tipo de conteúdo</label>
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-surface-container-lowest border border-outline-variant/25">
+              {(
+                [
+                  { id: 'course', label: 'Curso', icon: 'school' },
+                  { id: 'movie', label: 'Filme', icon: 'theaters' },
+                  { id: 'series', label: 'Série', icon: 'live_tv' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setContentType(opt.id)}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                    contentType === opt.id
+                      ? opt.id === 'course'
+                        ? 'bg-primary-container text-on-primary-container shadow'
+                        : 'bg-gradient-to-r from-fuchsia-600 to-rose-600 text-white shadow'
+                      : 'text-outline hover:text-on-surface'
+                  }`}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                    {opt.icon}
+                  </span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs text-on-surface-variant mb-1">Título</label>
           <input
@@ -316,19 +353,23 @@ export function CourseEditModal({ course, onClose, onSaved }: CourseEditModalPro
 
         <div>
           <label className="block text-xs text-on-surface-variant mb-1">
-            Instrutor (opcional)
+            {contentType === 'course' ? 'Instrutor (opcional)' : 'Diretor / Ano / Gênero (opcional)'}
           </label>
           <input
             type="text"
             value={instructor}
             onChange={(e) => setInstructor(e.target.value)}
-            placeholder="Ex.: Rodrigo Branas"
+            placeholder={
+              contentType === 'course' ? 'Ex.: Rodrigo Branas' : 'Ex.: Christopher Nolan · 2014'
+            }
             className="w-full rounded-lg bg-surface-container-lowest border border-outline-variant/30 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
           />
         </div>
 
         <div>
-          <label className="block text-xs text-on-surface-variant mb-1">Descrição</label>
+          <label className="block text-xs text-on-surface-variant mb-1">
+            {contentType === 'course' ? 'Descrição' : 'Sinopse'}
+          </label>
           <textarea
             rows={2}
             value={description}

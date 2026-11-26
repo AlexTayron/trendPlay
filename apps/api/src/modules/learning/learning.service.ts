@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import pg from 'pg';
 import {
+  ContentType,
   ContinueWatchingItem,
   CourseDetail,
   CourseSummary,
@@ -42,6 +43,12 @@ export class LearningService {
             OR ds.drive_file_id LIKE 'yt:playlist:%' THEN 'youtube'
           ELSE 'drive'
         END AS "sourceType",
+        CASE
+          WHEN ds.mime_type = 'application/vnd.devcore.movie'
+            OR ds.drive_file_id LIKE 'movie:%' THEN 'movie'
+          WHEN ds.mime_type = 'application/vnd.devcore.series' THEN 'series'
+          ELSE 'course'
+        END AS "contentType",
         c.title,
         c.description,
         c.instructor_name AS "instructorName",
@@ -199,12 +206,18 @@ export class LearningService {
         cursor.setDate(cursor.getDate() - 1);
       }
 
-      // Buscar item mais recente para "Continuar Estudando"
+      // Buscar itens mais recentes para "Continuar Estudando" (Cursos) e "Continuar Assistindo" (Streaming)
       const cwRes = await client.query(`
         SELECT
           c.id AS "courseId",
           c.title AS "courseTitle",
           c.instructor_name AS "instructorName",
+          CASE
+            WHEN ds.mime_type = 'application/vnd.devcore.movie'
+              OR ds.drive_file_id LIKE 'movie:%' THEN 'movie'
+            WHEN ds.mime_type = 'application/vnd.devcore.series' THEN 'series'
+            ELSE 'course'
+          END AS "contentType",
           m.title AS "moduleTitle",
           l.id AS "lessonId",
           l.title AS "lessonTitle",
@@ -214,29 +227,44 @@ export class LearningService {
         JOIN lessons l ON l.id = lp.lesson_id
         JOIN modules m ON m.id = l.module_id
         JOIN courses c ON c.id = m.course_id
+        LEFT JOIN drive_sources ds ON ds.id = c.drive_source_id AND ds.user_id = c.user_id
         WHERE c.is_archived = false
         ORDER BY lp.updated_at DESC
-        LIMIT 1;
+        LIMIT 30;
       `);
 
-      let continueWatching: ContinueWatchingItem | null = null;
-      if (cwRes.rows.length > 0) {
-        const cw = cwRes.rows[0];
+      const buildContinueItem = (cw: Record<string, unknown>): ContinueWatchingItem => {
         const courseSummary = courses.find((c) => c.id === cw.courseId);
-        continueWatching = {
-          courseId: cw.courseId,
-          courseTitle: cw.courseTitle,
-          instructorName: cw.instructorName,
-          moduleTitle: cw.moduleTitle,
-          lessonId: cw.lessonId,
-          lessonTitle: cw.lessonTitle,
+        return {
+          courseId: String(cw.courseId),
+          courseTitle: String(cw.courseTitle),
+          contentType: (cw.contentType as ContentType) || 'course',
+          instructorName: (cw.instructorName as string | null) ?? null,
+          moduleTitle: String(cw.moduleTitle),
+          lessonId: String(cw.lessonId),
+          lessonTitle: String(cw.lessonTitle),
           durationSeconds: Number(cw.durationSeconds || 0),
           lastPositionSeconds: Number(cw.lastPositionSeconds || 0),
           totalCourseSeconds: courseSummary?.totalDurationSeconds || 0,
           watchedCourseSeconds: courseSummary?.watchedSeconds || 0,
         };
-      } else if (courses[0]) {
-        const firstCourse = courses[0];
+      };
+
+      const onlyCourses = courses.filter((c) => c.contentType === 'course');
+      const onlyStreaming = courses.filter((c) => c.contentType !== 'course');
+
+      const latestCourseProgress = cwRes.rows.find((r) => r.contentType === 'course');
+      const latestStreamingProgress = cwRes.rows.find((r) => r.contentType !== 'course');
+
+      let continueWatching: ContinueWatchingItem | null = latestCourseProgress
+        ? buildContinueItem(latestCourseProgress)
+        : null;
+      let streamingContinueWatching: ContinueWatchingItem | null = latestStreamingProgress
+        ? buildContinueItem(latestStreamingProgress)
+        : null;
+
+      if (!continueWatching && onlyCourses[0]) {
+        const firstCourse = onlyCourses[0];
         const firstLessonRes = await client.query(
           `
           SELECT m.title AS "moduleTitle", l.id AS "lessonId",
@@ -254,6 +282,7 @@ export class LearningService {
           continueWatching = {
             courseId: firstCourse.id,
             courseTitle: firstCourse.title,
+            contentType: firstCourse.contentType,
             instructorName: firstCourse.instructorName,
             moduleTitle: fl.moduleTitle,
             lessonId: fl.lessonId,
@@ -266,19 +295,51 @@ export class LearningService {
         }
       }
 
+      if (!streamingContinueWatching && onlyStreaming[0]) {
+        const firstStream = onlyStreaming[0];
+        const firstEpRes = await client.query(
+          `
+          SELECT m.title AS "moduleTitle", l.id AS "lessonId",
+                 l.title AS "lessonTitle", l.duration_seconds AS "durationSeconds"
+            FROM modules m
+            JOIN lessons l ON l.module_id = m.id
+           WHERE m.course_id = $1
+           ORDER BY m.order_index ASC, l.order_index ASC
+           LIMIT 1;
+        `,
+          [firstStream.id],
+        );
+        if (firstEpRes.rows.length > 0) {
+          const fe = firstEpRes.rows[0];
+          streamingContinueWatching = {
+            courseId: firstStream.id,
+            courseTitle: firstStream.title,
+            contentType: firstStream.contentType,
+            instructorName: firstStream.instructorName,
+            moduleTitle: fe.moduleTitle,
+            lessonId: fe.lessonId,
+            lessonTitle: fe.lessonTitle,
+            durationSeconds: Number(fe.durationSeconds || 0),
+            lastPositionSeconds: 0,
+            totalCourseSeconds: firstStream.totalDurationSeconds,
+            watchedCourseSeconds: firstStream.watchedSeconds,
+          };
+        }
+      }
+
       await client.query('COMMIT');
 
-      const totalCourses = courses.length;
-      const coursesCompleted = courses.filter(
+      const totalCourses = onlyCourses.length;
+      const coursesCompleted = onlyCourses.filter(
         (c) => c.lessonsCount > 0 && c.completedLessonsCount >= c.lessonsCount,
       ).length;
-      const coursesInProgress = courses.filter(
+      const coursesInProgress = onlyCourses.filter(
         (c) => c.lessonsCount > 0 && c.completedLessonsCount < c.lessonsCount,
       ).length;
 
-      const totalLessons = courses.reduce((acc, c) => acc + c.lessonsCount, 0);
-      const totalCompletedLessons = courses.reduce((acc, c) => acc + c.completedLessonsCount, 0);
-      const totalWatchedFromLessons = courses.reduce((acc, c) => acc + c.watchedSeconds, 0);
+      const totalLessons = onlyCourses.reduce((acc, c) => acc + c.lessonsCount, 0);
+      const totalCompletedLessons = onlyCourses.reduce((acc, c) => acc + c.completedLessonsCount, 0);
+      const totalWatchedFromLessons = onlyCourses.reduce((acc, c) => acc + c.watchedSeconds, 0);
       const overallCompletionPercent =
         totalLessons > 0 ? Math.round((totalCompletedLessons / totalLessons) * 100) : 0;
 
@@ -294,6 +355,7 @@ export class LearningService {
           streakDays,
         },
         continueWatching,
+        streamingContinueWatching,
         courses,
       };
     } catch (error) {
@@ -456,6 +518,7 @@ export class LearningService {
       description?: string;
       instructorName?: string;
       thumbnailUrl?: string | null;
+      contentType?: ContentType;
     },
   ): Promise<CourseSummary> {
     const shouldUpdateThumb = params.thumbnailUrl !== undefined;
@@ -512,6 +575,28 @@ export class LearningService {
 
       if (updated.rows.length === 0) {
         throw new NotFoundException('Curso não encontrado.');
+      }
+
+      if (params.contentType) {
+        const nextMime =
+          params.contentType === 'movie'
+            ? 'application/vnd.devcore.movie'
+            : params.contentType === 'series'
+              ? 'application/vnd.devcore.series'
+              : 'application/vnd.google-apps.folder';
+        await client.query(
+          `
+          UPDATE drive_sources ds
+             SET mime_type = $2,
+                 updated_at = now()
+            FROM courses c
+           WHERE c.id = $1
+             AND c.user_id = app_user_id()
+             AND ds.id = c.drive_source_id
+             AND ds.drive_file_id NOT LIKE 'yt:playlist:%';
+        `,
+          [courseId, nextMime],
+        );
       }
 
       const summaries = await this.queryCourseSummaries(client, courseId);

@@ -12,12 +12,14 @@ import {
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Min,
 } from 'class-validator';
+import type { ContentType } from '@devcore/shared';
 import { CurrentUserId } from '../../common/decorators/current-user.decorator.js';
 import { AuthGuard } from '../../common/guards/auth.guard.js';
 import { LearningService } from './learning.service.js';
@@ -72,6 +74,10 @@ class UpdateCourseDto {
   @IsOptional()
   @IsString()
   thumbnailUrl?: string;
+
+  @IsOptional()
+  @IsIn(['course', 'movie', 'series'])
+  contentType?: ContentType;
 }
 
 @Controller('learning')
