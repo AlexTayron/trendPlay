@@ -142,9 +142,13 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
     callbacksRef.current = { onReady, onTimeUpdate, onPause, onEnded };
 
     const [ready, setReady] = useState(false);
+    const [hasStarted, setHasStarted] = useState(false);
     const [playing, setPlaying] = useState(false);
     const [buffering, setBuffering] = useState(false);
     const [embedBlocked, setEmbedBlocked] = useState(false);
+    const [posterSrc, setPosterSrc] = useState(
+      `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    );
     const [currentSec, setCurrentSec] = useState(initialPositionSeconds || 0);
     const [durationSec, setDurationSec] = useState(0);
     const [muted, setMuted] = useState(false);
@@ -252,9 +256,11 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
       if (!host) return;
 
       setReady(false);
+      setHasStarted(false);
       setPlaying(false);
       setBuffering(false);
       setEmbedBlocked(false);
+      setPosterSrc(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
       setCurrentSec(initialPositionSeconds || 0);
       setDurationSec(0);
       setControlsVisible(true);
@@ -321,6 +327,7 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
               onStateChange: ({ target, data }) => {
                 if (cancelled) return;
                 if (data === YT.PlayerState.PLAYING) {
+                  setHasStarted(true);
                   setPlaying(true);
                   setBuffering(false);
                   bumpControlsVisibility();
@@ -487,6 +494,39 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
         {/* Iframe YouTube sem controles nativos */}
         <div ref={hostRef} className="w-full h-full pointer-events-none" />
 
+        {/* Capa limpa antes do primeiro Play (remove completamente título/avatar/marca d'água do YouTube) */}
+        {!embedBlocked && !hasStarted && (
+          <div className="absolute inset-0 z-[5] bg-[#080c14] pointer-events-none">
+            <img
+              src={posterSrc}
+              alt="Capa da aula"
+              onError={() => {
+                if (!posterSrc.endsWith('hqdefault.jpg')) {
+                  setPosterSrc(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+                }
+              }}
+              className="w-full h-full object-cover opacity-85"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#080c14] via-black/25 to-[#080c14]/55" />
+          </div>
+        )}
+
+        {/* Faixa superior opaca quando pausado após iniciar (cobre o título/avatar nativo que o YouTube exibe na pausa) */}
+        {!embedBlocked && hasStarted && !playing && (
+          <div className="absolute inset-x-0 top-0 z-[15] h-16 sm:h-[72px] bg-[#0b1019] border-b border-outline-variant/15 px-4 flex items-center justify-between pointer-events-none">
+            <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+              <span className="font-semibold text-white">Pausado</span>
+              <span className="font-mono text-[11px] text-outline">
+                {formatDurationClock(currentSec)} / {formatDurationClock(durationSec)}
+              </span>
+            </div>
+            <span className="text-[11px] text-outline hidden sm:inline">
+              Clique no vídeo para retomar
+            </span>
+          </div>
+        )}
+
         {/* Camada de aviso caso o criador tenha desativado incorporação */}
         {embedBlocked ? (
           <div className="absolute inset-0 bg-[#0b1019]/95 flex flex-col items-center justify-center p-6 text-center z-20">
@@ -511,16 +551,19 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
               className="absolute inset-0 z-10 flex items-center justify-center bg-transparent focus:outline-none"
             >
               {buffering ? (
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-surface/80 backdrop-blur-md border border-secondary/40 flex items-center justify-center shadow-2xl">
-                  <span className="material-symbols-outlined text-secondary text-3xl animate-spin">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#0b1019]/85 backdrop-blur-md border border-secondary/40 flex items-center justify-center shadow-2xl">
+                  <span
+                    className="material-symbols-outlined text-secondary animate-spin"
+                    style={{ fontSize: '36px' }}
+                  >
                     progress_activity
                   </span>
                 </div>
               ) : !playing ? (
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary-container/95 hover:bg-secondary-container text-on-primary-container flex items-center justify-center shadow-2xl ring-4 ring-primary/25 transition-transform hover:scale-105">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary-container hover:bg-secondary-container text-on-primary-container flex items-center justify-center shadow-2xl ring-4 ring-primary/30 transition-transform hover:scale-105">
                   <span
-                    className="material-symbols-outlined text-[36px] sm:text-[44px] ml-1"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
+                    className="material-symbols-outlined ml-1"
+                    style={{ fontVariationSettings: "'FILL' 1", fontSize: '42px' }}
                   >
                     play_arrow
                   </span>
@@ -528,103 +571,110 @@ export const YouTubeLessonPlayer = forwardRef<YouTubePlayerHandle, YouTubeLesson
               ) : null}
             </button>
 
-            {/* Barra inferior de controles própria da plataforma */}
+            {/* Barra inferior opaca de controles própria da plataforma (cobre completamente a barra/marca d'água inferior do YouTube) */}
             <div
-              className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/75 to-transparent px-3 sm:px-4 pt-8 pb-3 transition-opacity duration-200 ${
+              className={`absolute inset-x-0 bottom-0 z-20 transition-opacity duration-200 ${
                 showChrome ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
-              {/* Barra de progresso / seek */}
-              <div className="relative flex items-center mb-2.5 group">
-                <div className="w-full h-1.5 rounded-full bg-white/20 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary-container to-secondary"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={durationSec || 100}
-                  step={1}
-                  value={Math.min(currentSec, durationSec || 100)}
-                  onChange={handleSeekInput}
-                  aria-label="Posição do vídeo"
-                  className="absolute inset-0 w-full h-4 -top-1 opacity-0 cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-2 text-white">
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTogglePlay}
-                    title={playing ? 'Pausar' : 'Reproduzir'}
-                    className="w-8 h-8 rounded-lg bg-primary-container/90 hover:bg-secondary-container text-on-primary-container flex items-center justify-center transition-colors"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[20px]"
-                      style={{ fontVariationSettings: "'FILL' 1" }}
-                    >
-                      {playing ? 'pause' : 'play_arrow'}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSkip(-10)}
-                    title="Voltar 10 segundos"
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">replay_10</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSkip(10)}
-                    title="Avançar 10 segundos"
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">forward_10</span>
-                  </button>
-
-                  <span className="ml-1 text-[11px] sm:text-xs font-mono text-slate-200 tabular-nums">
-                    {formatDurationClock(currentSec)} / {formatDurationClock(durationSec)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <button
-                    type="button"
-                    onClick={handleToggleMute}
-                    title={muted ? 'Ativar som' : 'Silenciar'}
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {muted || volume === 0 ? 'volume_off' : 'volume_up'}
-                    </span>
-                  </button>
-
+              <div className="h-6 bg-gradient-to-t from-[#0b1019] to-transparent pointer-events-none" />
+              <div className="bg-[#0b1019] border-t border-white/5 px-3 sm:px-4 pt-2 pb-2.5 sm:pb-3">
+                {/* Barra de progresso / seek */}
+                <div className="relative flex items-center mb-2.5 group">
+                  <div className="w-full h-1.5 rounded-full bg-white/15 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary-container to-secondary"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
                   <input
                     type="range"
                     min={0}
-                    max={100}
-                    value={muted ? 0 : volume}
-                    onChange={handleVolumeChange}
-                    aria-label="Volume"
-                    className="hidden sm:block w-16 accent-primary-container cursor-pointer"
+                    max={durationSec || 100}
+                    step={1}
+                    value={Math.min(currentSec, durationSec || 100)}
+                    onChange={handleSeekInput}
+                    aria-label="Posição do vídeo"
+                    className="absolute inset-0 w-full h-5 -top-1.5 opacity-0 cursor-pointer"
                   />
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={handleToggleFullscreen}
-                    title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+                <div className="flex items-center justify-between gap-2 text-white">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTogglePlay}
+                      title={playing ? 'Pausar' : 'Reproduzir'}
+                      className="w-8 h-8 rounded-lg bg-primary-container hover:bg-secondary-container text-on-primary-container flex items-center justify-center transition-colors"
+                    >
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontVariationSettings: "'FILL' 1", fontSize: '20px' }}
+                      >
+                        {playing ? 'pause' : 'play_arrow'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(-10)}
+                      title="Voltar 10 segundos"
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '19px' }}>
+                        replay_10
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(10)}
+                      title="Avançar 10 segundos"
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '19px' }}>
+                        forward_10
+                      </span>
+                    </button>
+
+                    <span className="ml-1 text-[11px] sm:text-xs font-mono text-slate-200 tabular-nums">
+                      {formatDurationClock(currentSec)} / {formatDurationClock(durationSec)}
                     </span>
-                  </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleMute}
+                      title={muted ? 'Ativar som' : 'Silenciar'}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '19px' }}>
+                        {muted || volume === 0 ? 'volume_off' : 'volume_up'}
+                      </span>
+                    </button>
+
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={muted ? 0 : volume}
+                      onChange={handleVolumeChange}
+                      aria-label="Volume"
+                      className="hidden sm:block w-16 accent-primary-container cursor-pointer"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleToggleFullscreen}
+                      title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-200 transition-colors"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '19px' }}>
+                        {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
