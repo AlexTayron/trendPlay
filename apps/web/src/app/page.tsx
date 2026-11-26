@@ -499,7 +499,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <a
-                href={getGoogleAuthUrl()}
+                href={getGoogleAuthUrl(Boolean(authConfig && !authConfig.registrationsOpen))}
                 className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs transition-all shadow-md"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
@@ -520,7 +520,11 @@ export default function DashboardPage() {
                     d="M12 4.76c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4 3.1c.95-2.84 3.6-4.95 6.72-4.95Z"
                   />
                 </svg>
-                <span className="hidden sm:inline">Entrar com Google</span>
+                <span className="hidden sm:inline">
+                  {authConfig && !authConfig.registrationsOpen
+                    ? 'Já tenho conta'
+                    : 'Entrar com Google'}
+                </span>
                 <span className="sm:hidden">Entrar</span>
               </a>
             )}
@@ -587,9 +591,30 @@ export default function DashboardPage() {
               <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
                 {/* Coluna Esquerda: Headline + Entrada Exclusiva Google */}
                 <div className="lg:col-span-7">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/10 border border-secondary/30 text-secondary text-[11px] font-mono font-semibold uppercase tracking-wider mb-5">
-                    <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
-                    <span>Entrada exclusiva pela sua conta Google</span>
+                  <div className="flex flex-wrap items-center gap-2 mb-5">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/10 border border-secondary/30 text-secondary text-[11px] font-mono font-semibold uppercase tracking-wider">
+                      <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+                      <span>Entrada exclusiva pela sua conta Google</span>
+                    </div>
+
+                    {authConfig && authConfig.maxUsers > 0 && (
+                      <div
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono font-semibold ${
+                          authConfig.registrationsOpen
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                            : 'bg-rose-500/15 border-rose-500/35 text-rose-300'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                          {authConfig.registrationsOpen ? 'group' : 'lock'}
+                        </span>
+                        <span>
+                          {authConfig.registrationsOpen
+                            ? `${authConfig.registeredUsersCount}/${authConfig.maxUsers} vagas ocupadas`
+                            : `Vagas encerradas (${authConfig.registeredUsersCount}/${authConfig.maxUsers})`}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <h1 className="text-3xl sm:text-5xl lg:text-[54px] font-extrabold text-white tracking-tight leading-[1.08]">
@@ -608,40 +633,70 @@ export default function DashboardPage() {
                     Séries por temporadas).
                   </p>
 
-                  {/* CTA Principal — Login Exclusivo Google */}
-                  <div className="mt-7 sm:mt-8 flex flex-col sm:flex-row sm:items-center gap-3.5">
-                    <a
-                      href={getGoogleAuthUrl()}
-                      className="inline-flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm transition-all shadow-xl hover:scale-[1.01]"
-                    >
-                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          fill="#4285F4"
-                          d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.08 3.56-5.15 3.56-8.65Z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.87-3c-1.07.72-2.44 1.15-4.06 1.15-3.12 0-5.77-2.11-6.72-4.95H1.28v3.1A12 12 0 0 0 12 24Z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.29A7.2 7.2 0 0 1 4.9 12c0-.79.14-1.56.38-2.29v-3.1H1.28A12 12 0 0 0 0 12c0 1.94.46 3.77 1.28 5.39l4-3.1Z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.76c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4 3.1c.95-2.84 3.6-4.95 6.72-4.95Z"
-                        />
-                      </svg>
-                      <span>Continuar com sua conta Google</span>
-                    </a>
-
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span className="material-symbols-outlined text-emerald-400 text-[18px] shrink-0">
-                        verified_user
-                      </span>
-                      <span>Sem senhas extras · Seu acervo fica 100% privado na sua conta</span>
+                  {/* CTA Principal — Login Exclusivo Google (ou bloqueio de novas inscrições ao atingir o limite) */}
+                  {authConfig && !authConfig.registrationsOpen ? (
+                    <div className="mt-7 sm:mt-8 p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-3">
+                      <div className="flex items-start gap-2.5">
+                        <span className="material-symbols-outlined text-rose-300 text-[22px] shrink-0 mt-0.5">
+                          person_off
+                        </span>
+                        <div>
+                          <div className="text-sm font-bold text-white">
+                            Novas inscrições temporariamente encerradas
+                          </div>
+                          <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                            Atingimos o limite máximo de{' '}
+                            <strong className="text-white">{authConfig.maxUsers} contas</strong>{' '}
+                            nesta fase. Se você já possui conta cadastrada, continue normalmente
+                            abaixo.
+                          </p>
+                        </div>
+                      </div>
+                      <div>
+                        <a
+                          href={getGoogleAuthUrl(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold text-xs transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">login</span>
+                          <span>Já tenho conta cadastrada · Entrar com Google</span>
+                        </a>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="mt-7 sm:mt-8 flex flex-col sm:flex-row sm:items-center gap-3.5">
+                      <a
+                        href={getGoogleAuthUrl()}
+                        className="inline-flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm transition-all shadow-xl hover:scale-[1.01]"
+                      >
+                        <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="#4285F4"
+                            d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.08 3.56-5.15 3.56-8.65Z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.87-3c-1.07.72-2.44 1.15-4.06 1.15-3.12 0-5.77-2.11-6.72-4.95H1.28v3.1A12 12 0 0 0 12 24Z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.28 14.29A7.2 7.2 0 0 1 4.9 12c0-.79.14-1.56.38-2.29v-3.1H1.28A12 12 0 0 0 0 12c0 1.94.46 3.77 1.28 5.39l4-3.1Z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 4.76c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4 3.1c.95-2.84 3.6-4.95 6.72-4.95Z"
+                          />
+                        </svg>
+                        <span>Continuar com sua conta Google</span>
+                      </a>
+
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span className="material-symbols-outlined text-emerald-400 text-[18px] shrink-0">
+                          verified_user
+                        </span>
+                        <span>Sem senhas extras · Seu acervo fica 100% privado na sua conta</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Selos rápidos de recursos */}
                   <div className="mt-6 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-300">

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -41,16 +42,46 @@ export class AuthService {
       .filter(Boolean);
   }
 
-  getConfigStatus(): AuthConfigStatus {
+  getMaxRegisteredUsers(): number {
+    const raw = process.env.MAX_REGISTERED_USERS?.trim();
+    if (raw === undefined || raw === '') return 90;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) return 90;
+    return Math.floor(parsed);
+  }
+
+  async getRegisteredUsersCount(): Promise<number> {
+    let client: pg.PoolClient | null = null;
+    try {
+      client = await this.pgPool.connect();
+      const res = await client.query<{ total: number }>(
+        'SELECT get_registered_users_count() AS total;',
+      );
+      return Number(res.rows[0]?.total ?? 0);
+    } catch {
+      // Se a função 0001_user_registration_limit.sql ainda não tiver sido aplicada, evita derrubar /auth/config
+      return 0;
+    } finally {
+      client?.release();
+    }
+  }
+
+  async getConfigStatus(): Promise<AuthConfigStatus> {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const pickerApiKey = process.env.GOOGLE_PICKER_API_KEY;
     const scopes = this.getDriveScopes();
+    const maxUsers = this.getMaxRegisteredUsers();
+    const registeredUsersCount = await this.getRegisteredUsersCount();
+    const registrationsOpen = maxUsers === 0 || registeredUsersCount < maxUsers;
 
     return {
       googleConfigured: !isPlaceholder(clientId) && !isPlaceholder(clientSecret),
       pickerConfigured: !isPlaceholder(pickerApiKey),
       driveScope: scopes.join(' '),
+      maxUsers,
+      registeredUsersCount,
+      registrationsOpen,
     };
   }
 
@@ -138,6 +169,7 @@ export class AuthService {
       if (
         error instanceof UnauthorizedException ||
         error instanceof BadRequestException ||
+        error instanceof ForbiddenException ||
         error instanceof ServiceUnavailableException
       ) {
         throw error;
@@ -213,22 +245,70 @@ export class AuthService {
     try {
       await client.query('BEGIN');
 
-      // 1. Invocar a função segura get_or_create_user (propriedade de devcore_auth)
-      const resProvision = await client.query(
-        `
-        SELECT get_or_create_user($1, $2, $3, $4, $5, $6) AS user_id;
-      `,
-        [
-          'google',
-          profile.googleId,
-          profile.email,
-          profile.emailVerified ?? true,
-          profile.name,
-          profile.avatarUrl || null,
-        ],
-      );
+      const maxUsers = this.getMaxRegisteredUsers();
+      let resProvision: pg.QueryResult<{ user_id: string }>;
 
-      const userId: string = resProvision.rows[0].user_id;
+      // 1. Invocar função segura get_or_create_user_with_limit (propriedade de devcore_auth)
+      try {
+        await client.query('SAVEPOINT sp_user_limit');
+        resProvision = await client.query(
+          `
+          SELECT get_or_create_user_with_limit($1, $2, $3, $4, $5, $6, $7) AS user_id;
+        `,
+          [
+            'google',
+            profile.googleId,
+            profile.email,
+            profile.emailVerified ?? true,
+            profile.name,
+            profile.avatarUrl || null,
+            maxUsers,
+          ],
+        );
+        await client.query('RELEASE SAVEPOINT sp_user_limit');
+      } catch (fnErr: unknown) {
+        const pgErr = fnErr as { code?: string; message?: string };
+        if (pgErr?.code === 'P0001' || pgErr?.message?.includes('registration_limit_reached')) {
+          await client.query('ROLLBACK');
+          // Revoga token recém-emitido (best-effort) para não deixar sessão órfã no Google
+          if (driveTokens?.accessToken) {
+            fetch(
+              `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(driveTokens.accessToken)}`,
+              { method: 'POST' },
+            ).catch(() => undefined);
+          }
+          throw new ForbiddenException(
+            `Limite máximo de ${maxUsers} contas atingido. Novas inscrições estão encerradas no momento.`,
+          );
+        }
+        // Fallback seguro caso 0001_user_registration_limit.sql ainda não tenha sido aplicada no banco
+        if (pgErr?.code === '42883') {
+          await client.query('ROLLBACK TO SAVEPOINT sp_user_limit');
+          this.logger.warn(
+            'Função get_or_create_user_with_limit não encontrada no PostgreSQL. Aplique packages/database/migrations/0001_user_registration_limit.sql.',
+          );
+          resProvision = await client.query(
+            `
+            SELECT get_or_create_user($1, $2, $3, $4, $5, $6) AS user_id;
+          `,
+            [
+              'google',
+              profile.googleId,
+              profile.email,
+              profile.emailVerified ?? true,
+              profile.name,
+              profile.avatarUrl || null,
+            ],
+          );
+        } else {
+          throw fnErr;
+        }
+      }
+
+      const userId = resProvision.rows[0]?.user_id;
+      if (!userId) {
+        throw new UnauthorizedException('Não foi possível provisionar o usuário.');
+      }
 
       // 2. Definir contexto RLS para a transação atual
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);

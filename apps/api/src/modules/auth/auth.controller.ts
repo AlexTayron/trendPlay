@@ -31,9 +31,22 @@ export class AuthController {
   }
 
   @Get('google')
-  startGoogleOAuth(@Res() res: Response) {
+  async startGoogleOAuth(
+    @Query('existing') existing: string | undefined,
+    @Res() res: Response,
+  ) {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     try {
+      // Bloqueia novas inscrições ANTES de redirecionar ao Google quando o limite (ex.: 90) foi atingido.
+      // Usuários já cadastrados ainda podem entrar com `?existing=1` (e o banco valida atomicamente no callback).
+      if (existing !== '1') {
+        const cfg = await this.authService.getConfigStatus();
+        if (!cfg.registrationsOpen) {
+          const msg = `Limite máximo de ${cfg.maxUsers} contas atingido. Novas inscrições estão encerradas no momento.`;
+          return res.redirect(`${frontendUrl}/?auth_error=${encodeURIComponent(msg)}`);
+        }
+      }
+
       const state = crypto.randomBytes(24).toString('hex');
       res.cookie('devcore_oauth_state', state, {
         httpOnly: true,

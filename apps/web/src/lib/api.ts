@@ -59,8 +59,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function getGoogleAuthUrl(): string {
-  return `${API_BASE_URL}/auth/google`;
+export function getGoogleAuthUrl(existingOnly = false): string {
+  return existingOnly
+    ? `${API_BASE_URL}/auth/google?existing=1`
+    : `${API_BASE_URL}/auth/google`;
 }
 
 export function getDriveStreamUrl(driveFileId: string, download = false): string {

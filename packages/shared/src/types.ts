@@ -172,6 +172,9 @@ export interface AuthConfigStatus {
   googleConfigured: boolean;
   pickerConfigured: boolean;
   driveScope: string;
+  maxUsers: number;
+  registeredUsersCount: number;
+  registrationsOpen: boolean;
 }
 
 export interface DriveFolderEntry {
