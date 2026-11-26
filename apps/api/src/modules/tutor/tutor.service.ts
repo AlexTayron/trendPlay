@@ -29,7 +29,12 @@ interface CourseContextBundle {
 }
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const FALLBACK_GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+const FALLBACK_GEMINI_MODELS = [
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+];
 
 function formatClock(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds || 0));
@@ -88,6 +93,7 @@ function decodeHtmlEntities(text: string): string {
 export class TutorService {
   private readonly logger = new Logger(TutorService.name);
   private readonly textCache = new Map<string, CachedText>();
+  private discoveredModelCache: { model: string; expiresAt: number } | null = null;
 
   constructor(
     private readonly pgPool: pg.Pool,
@@ -670,13 +676,70 @@ export class TutorService {
     }
   }
 
+  private async discoverGeminiModels(apiKey: string): Promise<{ models: string[]; error?: string }> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+    const res = await this.httpRequest(url, { method: 'GET' });
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(res.text) as { error?: { message?: string } };
+        if (j.error?.message) errMsg = j.error.message;
+      } catch {
+        // mantém status
+      }
+      return { models: [], error: errMsg };
+    }
+
+    try {
+      const data = JSON.parse(res.text) as {
+        models?: Array<{
+          name?: string;
+          supportedGenerationMethods?: string[];
+        }>;
+      };
+      const eligible = (data.models || [])
+        .filter(
+          (m) =>
+            m.name &&
+            m.name.includes('gemini') &&
+            Array.isArray(m.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes('generateContent'),
+        )
+        .map((m) => m.name!.replace(/^models\//, ''));
+
+      // Priorizar modelos flash mais novos (não-experimental / não-tts / não-image)
+      const ranked = [...eligible].sort((a, b) => {
+        const score = (name: string) => {
+          let s = 0;
+          if (name.includes('flash')) s += 50;
+          if (name.includes('3.') || name.includes('3-')) s += 30;
+          if (name.includes('2.5')) s += 25;
+          if (name.includes('2.0')) s += 15;
+          if (name.includes('latest')) s += 10;
+          if (name.includes('lite')) s -= 5;
+          if (name.includes('preview') || name.includes('exp')) s -= 8;
+          if (name.includes('tts') || name.includes('image') || name.includes('thinking')) s -= 40;
+          return s;
+        };
+        return score(b) - score(a);
+      });
+
+      this.logger.log(`Modelos Gemini descobertos na conta: ${ranked.slice(0, 6).join(', ')}`);
+      return { models: ranked };
+    } catch {
+      return { models: [] };
+    }
+  }
+
   private async callGemini(
     apiKey: string,
     systemPrompt: string,
     history: Array<{ role: 'user' | 'assistant'; content: string }>,
   ): Promise<{ text: string; modelUsed: string }> {
-    const preferredModel = this.getConfiguredModel();
-    const modelsToTry = Array.from(new Set([preferredModel, ...FALLBACK_GEMINI_MODELS]));
+    const preferredModel =
+      this.discoveredModelCache && this.discoveredModelCache.expiresAt > Date.now()
+        ? this.discoveredModelCache.model
+        : this.getConfiguredModel();
 
     const contents = history.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
@@ -694,9 +757,9 @@ export class TutorService {
       },
     });
 
-    let lastErrorMessage = 'Falha ao consultar a API do Google Gemini.';
-
-    for (const model of modelsToTry) {
+    const tryModel = async (
+      model: string,
+    ): Promise<{ ok: true; text: string } | { ok: false; status: number; errMsg: string }> => {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
       const res = await this.httpRequest(endpoint, {
         method: 'POST',
@@ -717,16 +780,9 @@ export class TutorService {
             .trim() || '';
 
         if (replyText) {
-          return { text: replyText, modelUsed: model };
+          return { ok: true, text: replyText };
         }
-        lastErrorMessage = 'O Gemini retornou uma resposta vazia.';
-        break;
-      }
-
-      // Se o modelo não existir (404), tenta o próximo modelo da lista
-      if (res.status === 404) {
-        this.logger.warn(`Modelo Gemini ${model} indisponível (404), tentando fallback...`);
-        continue;
+        return { ok: false, status: 502, errMsg: 'O Gemini retornou uma resposta vazia.' };
       }
 
       let apiErr = `HTTP ${res.status}`;
@@ -738,10 +794,52 @@ export class TutorService {
       } catch {
         // mantém HTTP status
       }
+      return { ok: false, status: res.status, errMsg: apiErr };
+    };
 
-      this.logger.error(`Erro na API Gemini (${model}): ${apiErr}`);
-      lastErrorMessage = `Erro no Gemini (${model}): ${apiErr}`;
+    // 1. Tenta o modelo preferido / cacheado primeiro
+    const initialList = Array.from(new Set([preferredModel, ...FALLBACK_GEMINI_MODELS]));
+    let lastErrorMessage = 'Falha ao consultar a API do Google Gemini.';
+    let allNotFound = true;
+
+    for (const model of initialList) {
+      const attempt = await tryModel(model);
+      if (attempt.ok) {
+        this.discoveredModelCache = { model, expiresAt: Date.now() + 60 * 60 * 1000 };
+        return { text: attempt.text, modelUsed: model };
+      }
+      lastErrorMessage = `Erro no Gemini (${model}): ${attempt.errMsg}`;
+      if (attempt.status === 404) {
+        this.logger.warn(`Modelo Gemini ${model} retornou 404: ${attempt.errMsg}`);
+        continue;
+      }
+      allNotFound = false;
+      this.logger.error(lastErrorMessage);
       break;
+    }
+
+    // 2. Se os modelos padrão deram 404, descobre dinamicamente os modelos ativos na chave!
+    if (allNotFound) {
+      const discovered = await this.discoverGeminiModels(apiKey);
+      if (discovered.error) {
+        throw new ServiceUnavailableException(
+          `Erro ao validar sua GEMINI_API_KEY no Google AI Studio: ${discovered.error}`,
+        );
+      }
+
+      const extraModels = discovered.models.filter((m) => !initialList.includes(m)).slice(0, 4);
+      for (const model of extraModels) {
+        const attempt = await tryModel(model);
+        if (attempt.ok) {
+          this.discoveredModelCache = { model, expiresAt: Date.now() + 60 * 60 * 1000 };
+          return { text: attempt.text, modelUsed: model };
+        }
+        lastErrorMessage = `Erro no Gemini (${model}): ${attempt.errMsg}`;
+        if (attempt.status !== 404) {
+          this.logger.error(lastErrorMessage);
+          break;
+        }
+      }
     }
 
     throw new ServiceUnavailableException(lastErrorMessage);
