@@ -437,9 +437,26 @@ export default function DashboardPage() {
             )}
 
             {dashboard ? (
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2.5">
+                {/* Frequência de estudos (Streak) no Navbar */}
                 <div
-                  className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                  title={`Frequência de estudos: ${dashboard.stats.streakDays} ${
+                    dashboard.stats.streakDays === 1 ? 'dia seguido' : 'dias seguidos'
+                  }`}
+                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-[#182334]/90 border border-slate-700/60 text-[11px] font-medium text-white shrink-0"
+                >
+                  <span className="text-[13px] leading-none select-none">🔥</span>
+                  <span className="sm:hidden font-mono font-bold">
+                    {dashboard.stats.streakDays}d
+                  </span>
+                  <span className="hidden sm:inline tracking-tight">
+                    {dashboard.stats.streakDays}{' '}
+                    {dashboard.stats.streakDays === 1 ? 'dia seguido' : 'dias seguidos'}
+                  </span>
+                </div>
+
+                <div
+                  className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
                     dashboard.drive.connected
                       ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
                       : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
@@ -867,15 +884,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap">
-                    <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#182334]/85 border border-slate-700/60 text-xs sm:text-sm shadow-inner backdrop-blur-md">
-                      <span className="text-sky-400 text-[15px] leading-none select-none">🔥</span>
-                      <span className="text-white font-medium tracking-tight">
-                        {dashboard.stats.streakDays}{' '}
-                        {dashboard.stats.streakDays === 1 ? 'dia seguido' : 'dias seguidos'}
-                      </span>
-                    </div>
-
+                  <div className="flex items-center gap-2 sm:gap-2.5 w-full lg:w-auto flex-wrap">
                     <button
                       onClick={() => setYtModalOpen(true)}
                       className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/35 font-semibold text-xs sm:text-sm transition-all"
@@ -919,6 +928,21 @@ export default function DashboardPage() {
                         <span className="material-symbols-outlined text-[18px]">cloud_sync</span>
                         <span>Reconectar Drive</span>
                       </a>
+                    )}
+
+                    {dashboard.drive.connected && !isDriveFileScope && (
+                      <button
+                        type="button"
+                        onClick={() => setShowManualImport((v) => !v)}
+                        title="Importar pasta colando link ou ID do Drive"
+                        className={`p-2 rounded-xl border text-xs transition-colors ${
+                          showManualImport
+                            ? 'bg-primary/15 text-primary border-primary/40'
+                            : 'bg-surface-container/80 hover:bg-surface-container-high border-outline-variant/30 text-on-surface-variant'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">link</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1085,47 +1109,16 @@ export default function DashboardPage() {
 
             {/* Biblioteca de Cursos do Google Drive */}
             <section className="w-full">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-                <div>
-                  <h2 className="text-xl font-bold text-on-surface tracking-tight">
-                    Meus Cursos ({filteredCourses.length})
-                  </h2>
-                  <p className="text-xs text-outline mt-0.5">
-                    Cursos sincronizados do Google Drive e playlists do YouTube em um só lugar.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <button
-                    onClick={() => setYtModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 text-xs font-semibold transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">smart_display</span>
-                    <span>Importar YouTube</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowManualImport((v) => !v)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs text-on-surface-variant transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">link</span>
-                    <span>Pasta por link/ID</span>
-                  </button>
-
-                  {dashboard.drive.connected && (
-                    <button
-                      onClick={() => setBrowserOpen(true)}
-                      disabled={importing}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary/15 hover:bg-secondary/25 text-secondary border border-secondary/30 text-xs font-semibold transition-all disabled:opacity-60"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">folder_open</span>
-                      <span>Explorar pastas do Drive</span>
-                    </button>
-                  )}
-                </div>
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-on-surface tracking-tight">
+                  Meus Cursos ({filteredCourses.length})
+                </h2>
+                <p className="text-xs text-outline mt-0.5">
+                  Cursos sincronizados do Google Drive e playlists do YouTube em um só lugar.
+                </p>
               </div>
 
-              {/* Fallback de importação por Link ou ID */}
+              {/* Fallback opcional de importação por Link ou ID */}
               {showManualImport && (
                 <form
                   onSubmit={handleManualFolderImport}
@@ -1162,17 +1155,23 @@ export default function DashboardPage() {
                   <p className="text-sm text-outline max-w-md mt-1.5">
                     {searchQuery
                       ? 'Tente buscar por outro termo ou limpe o campo de busca.'
-                      : 'Clique no botão abaixo para abrir o Google Picker e escolher uma pasta de curso no seu Google Drive.'}
+                      : 'Clique no botão abaixo para escolher os vídeos e materiais do seu Google Drive.'}
                   </p>
                   {!searchQuery && dashboard.drive.connected && (
                     <button
-                      onClick={() => setBrowserOpen(true)}
+                      onClick={() => {
+                        if (isDriveFileScope && authConfig?.pickerConfigured) {
+                          handleOpenPickedFilesImport('course');
+                        } else {
+                          setBrowserOpen(true);
+                        }
+                      }}
                       disabled={importing}
                       className="mt-6 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-sm transition-all"
                     >
-                      <span className="material-symbols-outlined text-[20px]">folder_open</span>
+                      <span className="material-symbols-outlined text-[20px]">add_to_drive</span>
                       <span>
-                        {importing ? 'Importando...' : 'Explorar minha pasta de cursos no Drive'}
+                        {importing ? 'Importando...' : 'Importar meu primeiro curso do Drive'}
                       </span>
                     </button>
                   )}
