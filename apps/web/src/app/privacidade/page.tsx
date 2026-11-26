@@ -47,10 +47,10 @@ export default function PrivacidadePage() {
               para identificar sua conta pessoal.
             </li>
             <li>
-              <strong>Acesso de leitura ao Google Drive:</strong> utilizado unicamente para listar
-              as pastas de cursos que você escolher importar e reproduzir os vídeos, PDFs,
-              documentos e imagens na sua própria área de estudos. O DevCore nunca altera, move ou
-              exclui arquivos do seu Google Drive.
+              <strong>Arquivos selecionados do Google Drive (`drive.file`):</strong> o DevCore
+              acessa exclusivamente os arquivos específicos que você escolher selecionar pelo
+              Google Picker nativo para assistir às suas aulas, filmes, séries ou ler materiais de
+              apoio. Não acessamos o restante do seu Google Drive e nunca excluímos seus arquivos.
             </li>
           </ul>
         </section>

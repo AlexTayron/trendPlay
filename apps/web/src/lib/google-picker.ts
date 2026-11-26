@@ -175,6 +175,7 @@ export async function openDriveFolderPicker(
 export async function openDriveFilesPicker(
   tokenInfo: PickerTokenResponse,
   parentId = 'root',
+  title = 'Selecione os vídeos e materiais das aulas',
 ): Promise<PickedDriveItem[]> {
   const pickerApi = await loadGooglePickerApi();
 
@@ -192,7 +193,7 @@ export async function openDriveFilesPicker(
       .setDeveloperKey(tokenInfo.apiKey)
       .setOrigin(`${window.location.protocol}//${window.location.host}`)
       .setLocale('pt-BR')
-      .setTitle('Selecione os vídeos e materiais das aulas')
+      .setTitle(title)
       .enableFeature(pickerApi.Feature.MULTISELECT_ENABLED)
       .enableFeature(pickerApi.Feature.SUPPORT_DRIVES)
       .addView(docsView)

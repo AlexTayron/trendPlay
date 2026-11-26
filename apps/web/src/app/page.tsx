@@ -16,11 +16,12 @@ import {
   getGoogleAuthUrl,
   getPickerToken,
   importDriveFolder,
+  importPickedDriveFiles,
   logout,
   resolveThumbnailUrl,
   syncDriveCourse,
 } from '../lib/api';
-import { openDriveFolderPicker } from '../lib/google-picker';
+import { openDriveFilesPicker, openDriveFolderPicker } from '../lib/google-picker';
 import { DriveFolderBrowserModal } from '../components/DriveFolderBrowserModal';
 import { DriveStreamingBrowserModal } from '../components/DriveStreamingBrowserModal';
 import { StreamingDashboardView } from '../components/StreamingDashboardView';
@@ -180,6 +181,47 @@ export default function DashboardPage() {
       text: `Pasta "${result.rootFolderName}" importada: ${result.coursesImported} curso(s), ${result.totalModules} módulo(s) e ${result.totalLessons} aula(s) carregados!`,
     });
     await loadData();
+  };
+
+  const isDriveFileScope = Boolean(
+    authConfig?.driveScope?.includes('drive.file') &&
+      !authConfig?.driveScope?.includes('drive.readonly'),
+  );
+
+  const handleOpenPickedFilesImport = async (mode: 'course' | 'auto') => {
+    setBanner(null);
+    setImporting(true);
+    try {
+      const tokenInfo = await getPickerToken();
+      const title =
+        mode === 'auto'
+          ? 'Escolha 1 vídeo (Filme) ou selecione episódios (Série)'
+          : 'Selecione os vídeos e materiais do curso (Ctrl+A para vários)';
+      const picked = await openDriveFilesPicker(tokenInfo, 'root', title);
+      if (picked.length === 0) {
+        setImporting(false);
+        return;
+      }
+
+      const result = await importPickedDriveFiles({
+        contentType: mode,
+        files: picked,
+      });
+
+      if (mode === 'auto') {
+        await handleStreamingItemImported(result);
+      } else {
+        await handleCourseImported(result);
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Erro ao importar arquivos selecionados do Google Drive.';
+      setBanner({ type: 'error', text: msg });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleOpenFolderPicker = async () => {
@@ -774,7 +816,13 @@ export default function DashboardPage() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             syncingId={syncingCourseId}
-            onOpenStreamingBrowser={() => setStreamingBrowserOpen(true)}
+            onOpenStreamingBrowser={() => {
+              if (isDriveFileScope && authConfig?.pickerConfigured) {
+                handleOpenPickedFilesImport('auto');
+              } else {
+                setStreamingBrowserOpen(true);
+              }
+            }}
             onSyncItem={handleSyncCourse}
             onEditItem={(item) => setEditingCourse(item)}
           />
@@ -838,7 +886,13 @@ export default function DashboardPage() {
 
                     {dashboard.drive.connected ? (
                       <button
-                        onClick={() => setBrowserOpen(true)}
+                        onClick={() => {
+                          if (isDriveFileScope && authConfig?.pickerConfigured) {
+                            handleOpenPickedFilesImport('course');
+                          } else {
+                            setBrowserOpen(true);
+                          }
+                        }}
                         disabled={importing}
                         className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-bold text-xs sm:text-sm transition-all shadow-md disabled:opacity-60"
                       >
@@ -850,7 +904,11 @@ export default function DashboardPage() {
                           {importing ? 'progress_activity' : 'add_to_drive'}
                         </span>
                         <span>
-                          {importing ? 'Importando...' : 'Pastas do Drive'}
+                          {importing
+                            ? 'Importando...'
+                            : isDriveFileScope
+                              ? 'Importar do Drive'
+                              : 'Pastas do Drive'}
                         </span>
                       </button>
                     ) : (

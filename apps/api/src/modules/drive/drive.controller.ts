@@ -68,6 +68,21 @@ class ImportMovieFileDto {
   fileName?: string;
 }
 
+class ImportPickedFilesDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsIn(['course', 'movie', 'series', 'auto'])
+  contentType?: 'course' | 'movie' | 'series' | 'auto';
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PickedFileDto)
+  files!: PickedFileDto[];
+}
+
 class AttachFilesDto {
   @IsOptional()
   @IsString()
@@ -136,6 +151,14 @@ export class DriveController {
     @Body() body: ImportMovieFileDto,
   ) {
     return this.driveService.importMovieFile(userId, body);
+  }
+
+  @Post('courses/import-picked')
+  importPickedFiles(
+    @CurrentUserId() userId: string,
+    @Body() body: ImportPickedFilesDto,
+  ) {
+    return this.driveService.importPickedFiles(userId, body);
   }
 
   @Post('courses/:courseId/sync')

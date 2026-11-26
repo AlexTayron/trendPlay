@@ -49,7 +49,7 @@ services:
       GOOGLE_CALLBACK_URL: https://${APP_DOMAIN}/api/auth/google/callback
       GOOGLE_PICKER_API_KEY: ${GOOGLE_PICKER_API_KEY:?Defina GOOGLE_PICKER_API_KEY no .env.prod}
       GOOGLE_APP_ID: ${GOOGLE_APP_ID:-}
-      GOOGLE_DRIVE_SCOPE: ${GOOGLE_DRIVE_SCOPE:-https://www.googleapis.com/auth/drive.readonly}
+      GOOGLE_DRIVE_SCOPE: ${GOOGLE_DRIVE_SCOPE:-https://www.googleapis.com/auth/drive.file}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}

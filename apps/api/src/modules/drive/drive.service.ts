@@ -1563,6 +1563,20 @@ export class DriveService {
       });
     }
 
+    if (folderId.startsWith('picked:')) {
+      return {
+        courseId,
+        title: courseTitle,
+        contentType:
+          sourceMime === MOVIE_MIME ? 'movie' : sourceMime === SERIES_MIME ? 'series' : 'course',
+        modulesCount: 0,
+        lessonsCount: 0,
+        documentsCount: 0,
+        warning:
+          'Este conteúdo foi importado via Google Picker (escopo drive.file). Para adicionar novos vídeos, episódios ou materiais, abra o item e clique em "Adicionar arquivos".',
+      };
+    }
+
     const preservedType: ContentType =
       sourceMime === MOVIE_MIME ? 'movie' : sourceMime === SERIES_MIME ? 'series' : 'course';
 
@@ -1571,6 +1585,221 @@ export class DriveService {
       folderName: courseTitle,
       contentType: preservedType,
     });
+  }
+
+  /**
+   * Cria um Curso, Filme ou Série diretamente a partir de arquivos selecionados no Google Picker nativo.
+   * Funciona 100% com o escopo gratuito/não-sensível `drive.file` (sem precisar de `drive.readonly`).
+   */
+  async importPickedFiles(
+    userId: string,
+    params: {
+      title?: string;
+      contentType?: ContentType | 'auto';
+      files: PickedDriveFileInput[];
+    },
+  ): Promise<ImportDriveFolderResult> {
+    if (!params.files || params.files.length === 0) {
+      throw new BadRequestException('Selecione pelo menos um arquivo no Google Picker.');
+    }
+
+    // Se o usuário selecionou uma única pasta, delega para importCourseFolder
+    if (
+      params.files.length === 1 &&
+      params.files[0]?.mimeType === FOLDER_MIME
+    ) {
+      return this.importCourseFolder(userId, {
+        folderId: params.files[0].id,
+        folderName: params.files[0].name,
+        contentType: params.contentType || 'course',
+      });
+    }
+
+    await this.setSyncState(userId, 'syncing', null, false);
+
+    try {
+      const { accessToken } = await this.getValidAccessToken(userId);
+      const drive = this.createDriveClient(accessToken);
+
+      const fetched: Array<DriveItem & { displayTitle: string }> = [];
+      let coverImageItem: DriveItem | null = null;
+
+      for (const picked of params.files) {
+        try {
+          const meta = await drive.files.get({
+            fileId: extractDriveId(picked.id),
+            fields:
+              'id, name, mimeType, size, md5Checksum, modifiedTime, parents, videoMediaMetadata(durationMillis)',
+            supportsAllDrives: true,
+          });
+          const d = meta.data;
+          if (!d.id || !d.name || !d.mimeType || d.mimeType === FOLDER_MIME) continue;
+
+          const item: DriveItem = {
+            id: d.id,
+            name: d.name,
+            mimeType: d.mimeType,
+            size: Number(d.size || 0),
+            md5Checksum: d.md5Checksum || null,
+            modifiedTime: d.modifiedTime || null,
+            parentId: d.parents?.[0] || null,
+            durationSeconds: Math.round(Number(d.videoMediaMetadata?.durationMillis || 0) / 1000),
+          };
+
+          const isCover =
+            !coverImageItem &&
+            (item.mimeType.startsWith('image/') ||
+              /\.(png|jpe?g|webp|gif)$/i.test(item.name)) &&
+            /^(capa|cover|thumb|thumbnail|banner|folder|poster)([\s._-]|$)/i.test(
+              stripExtension(item.name).trim(),
+            );
+
+          if (isCover) {
+            coverImageItem = item;
+            continue;
+          }
+
+          if (classifyDriveItem(item.mimeType, item.name) === 'ignore') continue;
+          fetched.push({
+            ...item,
+            displayTitle: stripExtension(item.name),
+          });
+        } catch {
+          // Ignora arquivo inacessível individualmente
+        }
+      }
+
+      if (fetched.length === 0) {
+        throw new BadRequestException(
+          'Nenhum vídeo, áudio ou material suportado foi encontrado nos arquivos selecionados.',
+        );
+      }
+
+      fetched.sort((a, b) => naturalCompare(a.name, b.name));
+
+      const videoFiles = fetched.filter((f) => classifyDriveItem(f.mimeType, f.name) === 'video');
+      const requestedType = params.contentType || 'course';
+      const resolvedType: ContentType =
+        requestedType === 'auto'
+          ? videoFiles.length <= 1
+            ? 'movie'
+            : 'series'
+          : requestedType;
+
+      // Filme único via arquivo selecionado
+      if (resolvedType === 'movie' && videoFiles.length === 1 && videoFiles[0]) {
+        const singleVideo = videoFiles[0];
+        const movieTitle = params.title?.trim() || singleVideo.displayTitle;
+        const result = await this.persistCourseStructure(userId, {
+          folderId: `movie:${singleVideo.id}`,
+          folderName: movieTitle,
+          folderParentId: singleVideo.parentId || null,
+          contentType: 'movie',
+          coverImageItem,
+          moduleBuckets: [
+            {
+              driveFolderId: null,
+              title: 'Filme',
+              files: fetched,
+            },
+          ],
+        });
+        await this.setSyncState(userId, 'idle', null, true);
+        return result;
+      }
+
+      // Inferir título limpo a partir da pasta pai (se acessível) ou do primeiro arquivo
+      let inferredTitle = params.title?.trim() || '';
+      const commonParentId = fetched[0]?.parentId || null;
+      if (!inferredTitle && commonParentId) {
+        try {
+          const parentMeta = await drive.files.get({
+            fileId: commonParentId,
+            fields: 'name',
+            supportsAllDrives: true,
+          });
+          if (parentMeta.data.name) {
+            inferredTitle = parentMeta.data.name;
+          }
+        } catch {
+          // No escopo drive.file a pasta pai pode não estar autorizada — usa nome do arquivo
+        }
+      }
+      if (!inferredTitle) {
+        const firstStem = fetched[0]?.displayTitle || 'Conteúdo do Google Drive';
+        // Remove sufixos comuns de episódio (ex.: "S01E01", "Aula 01", "01 -")
+        const cleaned = firstStem
+          .replace(/[\s._-]*(?:s\d{1,2}\s*e\d{1,3}|t\d{1,2}\s*e\d{1,3}|\d{1,2}x\d{1,3}).*$/i, '')
+          .replace(/^(?:aula|ep|episodio|episódio)?\s*\d+\s*[-_.)]?\s*/i, '')
+          .trim();
+        inferredTitle = cleaned.length >= 3 ? cleaned : firstStem;
+      }
+
+      const moduleBuckets: Array<{
+        driveFolderId: string | null;
+        title: string;
+        files: Array<DriveItem & { displayTitle: string }>;
+      }> = [];
+
+      if (resolvedType === 'series') {
+        const seasonGroups = new Map<number, Array<DriveItem & { displayTitle: string }>>();
+        const ungrouped: Array<DriveItem & { displayTitle: string }> = [];
+        for (const f of fetched) {
+          const sNum = extractSeasonNumber(f.name);
+          if (sNum !== null && sNum > 0) {
+            const arr = seasonGroups.get(sNum) || [];
+            arr.push(f);
+            seasonGroups.set(sNum, arr);
+          } else {
+            ungrouped.push(f);
+          }
+        }
+
+        if (seasonGroups.size > 0) {
+          const sorted = Array.from(seasonGroups.keys()).sort((a, b) => a - b);
+          for (const sNum of sorted) {
+            moduleBuckets.push({
+              driveFolderId: null,
+              title: `Temporada ${String(sNum).padStart(2, '0')}`,
+              files: seasonGroups.get(sNum) || [],
+            });
+          }
+          if (ungrouped.length > 0) {
+            moduleBuckets[0]?.files.push(...ungrouped);
+          }
+        } else {
+          moduleBuckets.push({
+            driveFolderId: null,
+            title: 'Temporada 01',
+            files: fetched,
+          });
+        }
+      } else {
+        moduleBuckets.push({
+          driveFolderId: null,
+          title: 'Módulo 01 — Aulas',
+          files: fetched,
+        });
+      }
+
+      const syntheticId = `picked:${crypto.randomUUID().slice(0, 12)}`;
+      const result = await this.persistCourseStructure(userId, {
+        folderId: syntheticId,
+        folderName: inferredTitle,
+        folderParentId: commonParentId,
+        contentType: resolvedType,
+        coverImageItem,
+        moduleBuckets,
+      });
+
+      await this.setSyncState(userId, 'idle', null, true);
+      return result;
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : 'Erro ao importar arquivos selecionados.';
+      await this.setSyncState(userId, 'error', msg, false);
+      throw error;
+    }
   }
 
   /**

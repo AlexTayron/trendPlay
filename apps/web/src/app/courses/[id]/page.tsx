@@ -8,6 +8,7 @@ import {
   attachDriveFiles,
   createLessonNote,
   deleteLessonNote,
+  getAuthConfig,
   getCourseDetail,
   getDriveStreamUrl,
   getLessonNotes,
@@ -180,6 +181,7 @@ function CoursePlayerContent() {
   const [syncing, setSyncing] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
+  const [isDriveFileScope, setIsDriveFileScope] = useState(false);
   const [liveDuration, setLiveDuration] = useState(0);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -363,6 +365,15 @@ function CoursePlayerContent() {
 
   useEffect(() => {
     loadCourse(false);
+    getAuthConfig()
+      .then((cfg) => {
+        setIsDriveFileScope(
+          Boolean(
+            cfg.driveScope?.includes('drive.file') && !cfg.driveScope?.includes('drive.readonly'),
+          ),
+        );
+      })
+      .catch(() => undefined);
   }, [loadCourse]);
 
   const flatLessons = useMemo(() => {
@@ -804,7 +815,20 @@ function CoursePlayerContent() {
     setStatusMsg(null);
     try {
       const tokenInfo = await getPickerToken();
-      const picked = await openDriveFilesPicker(tokenInfo, course?.driveFolderId || 'root');
+      const rawParent = course?.driveFolderId || 'root';
+      const safeParent =
+        rawParent.startsWith('picked:') ||
+        rawParent.startsWith('movie:') ||
+        rawParent.startsWith('yt:')
+          ? 'root'
+          : rawParent;
+      const picked = await openDriveFilesPicker(
+        tokenInfo,
+        safeParent,
+        course?.contentType === 'series'
+          ? 'Selecione os episódios da temporada no Google Drive'
+          : 'Selecione os vídeos e materiais das aulas',
+      );
       if (picked.length === 0) {
         setAttaching(false);
         return;
@@ -1171,7 +1195,13 @@ function CoursePlayerContent() {
 
           {!isYoutubeCourse && !isMovie && (
             <button
-              onClick={() => setFileBrowserOpen(true)}
+              onClick={() => {
+                if (isDriveFileScope || course.driveFolderId?.startsWith('picked:')) {
+                  handleAttachFilesFromPicker();
+                } else {
+                  setFileBrowserOpen(true);
+                }
+              }}
               disabled={attaching}
               title="Adicionar arquivos do Google Drive"
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/30 text-xs font-medium transition-all disabled:opacity-50"

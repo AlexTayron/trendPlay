@@ -155,6 +155,17 @@ export function importDriveMovieFile(payload: {
   });
 }
 
+export function importPickedDriveFiles(payload: {
+  title?: string;
+  contentType?: ContentType | 'auto';
+  files: Array<{ id: string; name: string; mimeType?: string }>;
+}): Promise<ImportDriveFolderResult> {
+  return apiFetch<ImportDriveFolderResult>('/drive/courses/import-picked', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function importRootCoursesFolder(
   folderId: string,
   contentType: ContentType | 'auto' = 'course',
