@@ -159,8 +159,10 @@ function CoursePlayerContent() {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [playbackRate, setPlaybackRate] = useState(1);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [theaterMode, setTheaterMode] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'lessons' | 'tutor'>('lessons');
+  const [mobileTab, setMobileTab] = useState<'lessons' | 'tutor' | 'notes'>('lessons');
   const [tutorDrawerOpen, setTutorDrawerOpen] = useState(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -199,10 +201,26 @@ function CoursePlayerContent() {
       if (savedTheater === '1') {
         setTheaterMode(true);
       }
+      const savedHideCompleted = window.localStorage.getItem('devcore_hide_completed');
+      if (savedHideCompleted === '1') {
+        setHideCompleted(true);
+      }
     } catch {
       // ignora
     }
   }, []);
+
+  const toggleHideCompleted = () => {
+    setHideCompleted((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem('devcore_hide_completed', next ? '1' : '0');
+      } catch {
+        // ignora
+      }
+      return next;
+    });
+  };
 
   const toggleTheaterMode = useCallback(() => {
     setTheaterMode((prev) => {
@@ -722,10 +740,118 @@ function CoursePlayerContent() {
     const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
     if (isDesktop && !theaterMode) {
       setSidebarTab((prev) => (prev === 'tutor' ? 'lessons' : 'tutor'));
+    } else if (!isDesktop) {
+      setMobileTab('tutor');
     } else {
       setTutorDrawerOpen(true);
     }
   };
+
+  const renderCurriculumTree = () => (
+    <div className="divide-y divide-outline-variant/15">
+      {course.modules.map((mod) => {
+        const isOpen = expandedModules[mod.id] ?? true;
+        const completedInMod = mod.lessons.filter((l) => l.isCompleted).length;
+        const visibleLessons = hideCompleted
+          ? mod.lessons.filter((l) => !l.isCompleted || l.id === activeLessonId)
+          : mod.lessons;
+
+        if (hideCompleted && visibleLessons.length === 0) {
+          return null;
+        }
+
+        return (
+          <div key={mod.id}>
+            <button
+              onClick={() =>
+                setExpandedModules((prev) => ({ ...prev, [mod.id]: !isOpen }))
+              }
+              className="w-full px-4 py-3 flex items-center justify-between gap-2 bg-surface-container/60 hover:bg-surface-container text-left transition-colors"
+            >
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-on-surface truncate">
+                  {mod.title}
+                </div>
+                <div className="text-[10px] font-mono text-outline mt-0.5">
+                  {completedInMod}/{mod.lessons.length} concluídas
+                </div>
+              </div>
+              <span className="material-symbols-outlined text-[18px] text-outline shrink-0">
+                {isOpen ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+
+            {isOpen && (
+              <div className="divide-y divide-outline-variant/10">
+                {visibleLessons.map((lesson) => {
+                  const isActive = lesson.id === activeLessonId;
+                  const effectiveDuration =
+                    isActive && liveDuration > 0 ? liveDuration : lesson.durationSeconds;
+                  const effectivePosition =
+                    isActive && currentTime > 0
+                      ? Math.max(currentTime, lesson.lastPositionSeconds)
+                      : lesson.lastPositionSeconds;
+                  const lessonProgress = lesson.isCompleted
+                    ? 100
+                    : effectiveDuration > 0
+                      ? Math.min(99, Math.round((effectivePosition / effectiveDuration) * 100))
+                      : effectivePosition > 0
+                        ? 15
+                        : 0;
+                  const lessonType = isVideoLesson(lesson)
+                    ? 'video'
+                    : isAudioLesson(lesson)
+                      ? 'audio'
+                      : 'doc';
+
+                  return (
+                    <button
+                      key={lesson.id}
+                      onClick={() => selectLesson(lesson.id)}
+                      className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
+                        isActive
+                          ? 'bg-primary/15 border-l-2 border-primary'
+                          : 'hover:bg-surface-container/50'
+                      }`}
+                    >
+                      <LessonPlayProgressRing
+                        progressPercent={lessonProgress}
+                        isCompleted={lesson.isCompleted}
+                        isActive={isActive}
+                        lessonType={lessonType}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className={`text-xs leading-snug ${
+                            isActive
+                              ? 'font-bold text-white'
+                              : 'font-medium text-on-surface-variant'
+                          }`}
+                        >
+                          {lesson.title}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-outline">
+                          {effectiveDuration > 0 && (
+                            <span>{formatDurationClock(effectiveDuration)}</span>
+                          )}
+                          {!lesson.isCompleted && lessonProgress > 0 && (
+                            <span className="text-secondary">{lessonProgress}%</span>
+                          )}
+                          {lesson.resources.length > 0 && (
+                            <span>· {lesson.resources.length} anexo(s)</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-surface overflow-x-hidden">
@@ -884,8 +1010,60 @@ function CoursePlayerContent() {
             </div>
           ) : (
             <>
+              {/* Cabeçalho Mobile acima do vídeo (Breadcrumb + Selo Aula + Navegação rápida) */}
+              <div className="lg:hidden space-y-2.5">
+                <div className="text-[11px] font-mono text-outline truncate">
+                  <Link href="/" className="hover:text-on-surface">
+                    Início
+                  </Link>{' '}
+                  / <span>{course.title}</span> /{' '}
+                  <span className="text-secondary">{activeLesson.moduleTitle}</span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="px-2 py-1 rounded-md bg-primary/15 text-primary text-[10px] font-mono font-bold uppercase tracking-wider shrink-0 mt-0.5">
+                    AULA {String(activeLessonIndex + 1).padStart(2, '0')}
+                  </span>
+                  <h2 className="text-lg font-extrabold text-white leading-snug break-words">
+                    {activeLesson.title}
+                  </h2>
+                </div>
+
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    disabled={!prevLesson}
+                    onClick={() => prevLesson && selectLesson(prevLesson.id)}
+                    title="Aula anterior"
+                    className="h-9 w-9 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/25 flex items-center justify-center text-on-surface disabled:opacity-35 shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                  </button>
+                  <button
+                    disabled={!nextLesson}
+                    onClick={() => nextLesson && selectLesson(nextLesson.id)}
+                    className="h-9 px-4 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container text-xs font-bold flex items-center gap-1 disabled:opacity-35"
+                  >
+                    <span>Próxima aula</span>
+                    <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                  </button>
+                  <button
+                    onClick={handleToggleCompleted}
+                    className={`ml-auto h-9 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
+                      activeLesson.isCompleted
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      {activeLesson.isCompleted ? 'check_circle' : 'radio_button_unchecked'}
+                    </span>
+                    <span>{activeLesson.isCompleted ? 'Concluída' : 'Concluir'}</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Container de Mídia */}
-              <div className="relative rounded-2xl overflow-hidden bg-black border border-outline-variant/25 shadow-2xl">
+              <div className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-black border border-outline-variant/25 shadow-2xl">
                 {isYoutubeLesson(activeLesson) && getYoutubeVideoId(activeLesson) ? (
                   <YouTubeLessonPlayer
                     key={activeLesson.id}
@@ -994,8 +1172,145 @@ function CoursePlayerContent() {
                 )}
               </div>
 
-              {/* Barra de Controles e Metadados da Aula */}
-              <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5 flex flex-col gap-4">
+              {/* Controles Mobile Enxutos (Autoplay + Ocultar concluídas + Velocidade horizontal) */}
+              <div className="lg:hidden rounded-2xl bg-surface-container-low border border-outline-variant/25 p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  {(isVideoLesson(activeLesson) || isAudioLesson(activeLesson)) && (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoPlay}
+                      onClick={toggleAutoPlay}
+                      className="flex items-center gap-2 text-xs font-medium text-on-surface"
+                    >
+                      <span
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          autoPlay ? 'bg-primary-container' : 'bg-outline-variant'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            autoPlay ? 'translate-x-[18px]' : 'translate-x-1'
+                          }`}
+                        />
+                      </span>
+                      <span>Autoplay</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={hideCompleted}
+                    onClick={toggleHideCompleted}
+                    className="flex items-center gap-2 text-xs font-medium text-on-surface-variant"
+                  >
+                    <span
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        hideCompleted ? 'bg-secondary' : 'bg-outline-variant'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          hideCompleted ? 'translate-x-[18px]' : 'translate-x-1'
+                        }`}
+                      />
+                    </span>
+                    <span>Ocultar concluídas</span>
+                  </button>
+                </div>
+
+                {isVideoLesson(activeLesson) && (
+                  <div className="flex items-center gap-2.5 pt-2.5 border-t border-outline-variant/20">
+                    <span className="text-xs text-outline shrink-0">Velocidade</span>
+                    <div className="flex items-center gap-1 overflow-x-auto bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/20 flex-1">
+                      {PLAYBACK_RATES.map((rate) => (
+                        <button
+                          key={rate}
+                          onClick={() => setPlaybackRate(rate)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-colors shrink-0 ${
+                            playbackRate === rate
+                              ? 'bg-primary-container text-on-primary-container font-bold'
+                              : 'text-on-surface-variant hover:text-on-surface'
+                          }`}
+                        >
+                          {rate.toFixed(rate % 1 === 0 ? 1 : 2).replace(/\.00$/, '.0')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Abas Segmentadas Mobile (Aulas | Tutor IA | Notas) */}
+              <div className="lg:hidden space-y-3">
+                <div className="p-1 rounded-2xl bg-surface-container border border-outline-variant/25 grid grid-cols-3 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('lessons')}
+                    className={`py-2 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      mobileTab === 'lessons'
+                        ? 'bg-surface-container-highest text-white shadow'
+                        : 'text-outline hover:text-on-surface-variant'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      format_list_bulleted
+                    </span>
+                    <span>Aulas</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('tutor')}
+                    className={`py-2 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      mobileTab === 'tutor'
+                        ? 'bg-secondary/20 text-secondary shadow'
+                        : 'text-outline hover:text-secondary'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                    <span>Tutor IA</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('notes')}
+                    className={`py-2 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      mobileTab === 'notes'
+                        ? 'bg-surface-container-highest text-white shadow'
+                        : 'text-outline hover:text-on-surface-variant'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit_note</span>
+                    <span>Notas ({notes.length})</span>
+                  </button>
+                </div>
+
+                {mobileTab === 'lessons' && (
+                  <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-outline-variant/20 flex items-center justify-between text-xs">
+                      <span className="font-bold text-on-surface">Conteúdo do Curso</span>
+                      <span className="font-mono text-primary font-bold">
+                        {course.completedLessonsCount}/{course.lessonsCount} · {course.progressPercent}%
+                      </span>
+                    </div>
+                    <div className="max-h-[460px] overflow-y-auto">{renderCurriculumTree()}</div>
+                  </div>
+                )}
+
+                {mobileTab === 'tutor' && (
+                  <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden h-[500px]">
+                    <CourseTutorPanel
+                      courseId={courseId}
+                      lessonId={activeLessonId}
+                      lessonTitle={activeLesson.title}
+                      currentTimeSeconds={currentTime}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Barra de Controles e Metadados da Aula (Desktop) */}
+              <div className="hidden lg:flex rounded-2xl bg-surface-container-low border border-outline-variant/25 p-5 flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
                   <div className="min-w-0">
                     <span className="text-[11px] sm:text-xs font-mono text-secondary uppercase tracking-wider">
@@ -1153,7 +1468,11 @@ function CoursePlayerContent() {
 
               {/* Materiais de Apoio da Aula */}
               {activeLesson.resources.length > 0 && (
-                <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 p-5">
+                <div
+                  className={`${
+                    mobileTab === 'notes' ? 'block' : 'hidden lg:block'
+                  } rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5`}
+                >
                   <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
                     <span className="material-symbols-outlined text-secondary text-[18px]">
                       attach_file
@@ -1196,7 +1515,11 @@ function CoursePlayerContent() {
               )}
 
               {/* Anotações da Aula com Timestamp */}
-              <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 p-5">
+              <div
+                className={`${
+                  mobileTab === 'notes' ? 'block' : 'hidden lg:block'
+                } rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5`}
+              >
                 <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
                   <span className="material-symbols-outlined text-tertiary text-[18px]">
                     edit_note
@@ -1272,9 +1595,9 @@ function CoursePlayerContent() {
           )}
         </div>
 
-        {/* Sidebar de Conteúdo (Módulos/Aulas + Tutor IA Gemini) — recolhida no Modo Teatro */}
+        {/* Sidebar de Conteúdo Desktop (Módulos/Aulas + Tutor IA Gemini) — recolhida no Modo Teatro */}
         {!theaterMode && (
-          <aside className="lg:col-span-4 min-w-0">
+          <aside className="hidden lg:block lg:col-span-4 min-w-0">
             <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 overflow-hidden lg:sticky lg:top-20 flex flex-col">
               {/* Abas: Aulas | Tutor Gemini */}
               <div className="grid grid-cols-2 border-b border-outline-variant/20 bg-surface-container/70">
@@ -1305,7 +1628,7 @@ function CoursePlayerContent() {
               </div>
 
               {sidebarTab === 'tutor' ? (
-                <div className="h-[520px] lg:h-[calc(100vh-145px)]">
+                <div className="h-[calc(100vh-145px)]">
                   <CourseTutorPanel
                     courseId={courseId}
                     lessonId={activeLessonId}
@@ -1323,6 +1646,18 @@ function CoursePlayerContent() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={toggleHideCompleted}
+                        title="Ocultar aulas já concluídas"
+                        className={`px-2 py-1 rounded-md text-[10px] font-mono border transition-colors ${
+                          hideCompleted
+                            ? 'bg-secondary/15 text-secondary border-secondary/40'
+                            : 'bg-surface-container text-outline border-outline-variant/25 hover:text-on-surface'
+                        }`}
+                      >
+                        {hideCompleted ? 'Mostrando pendentes' : 'Ocultar concluídas'}
+                      </button>
                       <span className="text-xs font-mono font-bold text-primary">
                         {course.progressPercent}%
                       </span>
@@ -1330,7 +1665,7 @@ function CoursePlayerContent() {
                         type="button"
                         onClick={toggleTheaterMode}
                         title="Recolher lista (Modo Teatro · Tecla T)"
-                        className="hidden lg:inline-flex p-1 rounded-md text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                        className="p-1 rounded-md text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors"
                       >
                         <span className="material-symbols-outlined text-[18px]">
                           right_panel_close
@@ -1339,100 +1674,8 @@ function CoursePlayerContent() {
                     </div>
                   </div>
 
-                  <div className="max-h-[460px] lg:max-h-[calc(100vh-225px)] overflow-y-auto divide-y divide-outline-variant/15">
-              {course.modules.map((mod) => {
-                const isOpen = expandedModules[mod.id] ?? true;
-                const completedInMod = mod.lessons.filter((l) => l.isCompleted).length;
-                return (
-                  <div key={mod.id}>
-                    <button
-                      onClick={() =>
-                        setExpandedModules((prev) => ({ ...prev, [mod.id]: !isOpen }))
-                      }
-                      className="w-full px-4 py-3 flex items-center justify-between gap-2 bg-surface-container/60 hover:bg-surface-container text-left transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-on-surface truncate">
-                          {mod.title}
-                        </div>
-                        <div className="text-[10px] font-mono text-outline mt-0.5">
-                          {completedInMod}/{mod.lessons.length} concluídas
-                        </div>
-                      </div>
-                      <span className="material-symbols-outlined text-[18px] text-outline shrink-0">
-                        {isOpen ? 'expand_less' : 'expand_more'}
-                      </span>
-                    </button>
-
-                    {isOpen && (
-                      <div className="divide-y divide-outline-variant/10">
-                        {mod.lessons.map((lesson) => {
-                          const isActive = lesson.id === activeLessonId;
-                          const effectiveDuration =
-                            isActive && liveDuration > 0 ? liveDuration : lesson.durationSeconds;
-                          const effectivePosition =
-                            isActive && currentTime > 0
-                              ? Math.max(currentTime, lesson.lastPositionSeconds)
-                              : lesson.lastPositionSeconds;
-                          const lessonProgress = lesson.isCompleted
-                            ? 100
-                            : effectiveDuration > 0
-                              ? Math.min(99, Math.round((effectivePosition / effectiveDuration) * 100))
-                              : effectivePosition > 0
-                                ? 15
-                                : 0;
-                          const lessonType = isVideoLesson(lesson)
-                            ? 'video'
-                            : isAudioLesson(lesson)
-                              ? 'audio'
-                              : 'doc';
-
-                          return (
-                            <button
-                              key={lesson.id}
-                              onClick={() => selectLesson(lesson.id)}
-                              className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
-                                isActive
-                                  ? 'bg-primary/15 border-l-2 border-primary'
-                                  : 'hover:bg-surface-container/50'
-                              }`}
-                            >
-                              <LessonPlayProgressRing
-                                progressPercent={lessonProgress}
-                                isCompleted={lesson.isCompleted}
-                                isActive={isActive}
-                                lessonType={lessonType}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div
-                                  className={`text-xs leading-snug ${
-                                    isActive
-                                      ? 'font-bold text-white'
-                                      : 'font-medium text-on-surface-variant'
-                                  }`}
-                                >
-                                  {lesson.title}
-                                </div>
-                                <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-outline">
-                                  {effectiveDuration > 0 && (
-                                    <span>{formatDurationClock(effectiveDuration)}</span>
-                                  )}
-                                  {!lesson.isCompleted && lessonProgress > 0 && (
-                                    <span className="text-secondary">{lessonProgress}%</span>
-                                  )}
-                                  {lesson.resources.length > 0 && (
-                                    <span>· {lesson.resources.length} anexo(s)</span>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  <div className="max-h-[calc(100vh-225px)] overflow-y-auto">
+                    {renderCurriculumTree()}
                   </div>
                 </>
               )}

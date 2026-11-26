@@ -596,58 +596,89 @@ export default function DashboardPage() {
             </section>
 
             {/* Continuar Estudando (somente dados reais) */}
-            {dashboard.continueWatching && (
-              <section className="w-full mb-6 sm:mb-8">
-                <div className="p-4 sm:p-6 bg-surface-container-low rounded-2xl border border-secondary/20 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
-                  <div className="flex-1 max-w-3xl min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded bg-secondary/15 text-secondary text-[11px] sm:text-xs font-mono font-semibold uppercase tracking-wider">
-                        CONTINUAR ESTUDANDO
-                      </span>
-                      {dashboard.continueWatching.totalCourseSeconds > 0 && (
-                        <>
-                          <span className="text-outline font-mono text-xs">·</span>
-                          <span className="text-[11px] sm:text-xs font-mono text-on-surface-variant">
-                            {formatWatchTime(dashboard.continueWatching.watchedCourseSeconds)} de{' '}
-                            {formatWatchTime(dashboard.continueWatching.totalCourseSeconds)}{' '}
-                            assistidas
+            {dashboard.continueWatching && (() => {
+              const cw = dashboard.continueWatching;
+              const cwCourse = dashboard.courses.find((c) => c.id === cw.courseId);
+              const cwPercent =
+                cwCourse?.progressPercent ??
+                (cw.totalCourseSeconds > 0
+                  ? Math.min(100, Math.round((cw.watchedCourseSeconds / cw.totalCourseSeconds) * 100))
+                  : 0);
+              return (
+                <section className="w-full mb-6 sm:mb-8">
+                  <div className="p-4 sm:p-6 bg-surface-container-low rounded-2xl border border-secondary/20 shadow-xl flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 sm:gap-6">
+                    <div className="flex items-start gap-3.5 sm:gap-4 flex-1 min-w-0">
+                      <div className="w-16 h-14 sm:w-20 sm:h-16 rounded-xl overflow-hidden bg-gradient-to-br from-primary-container/30 to-secondary/20 border border-outline-variant/25 flex items-center justify-center shrink-0">
+                        {cwCourse?.thumbnailUrl ? (
+                          <img
+                            src={cwCourse.thumbnailUrl}
+                            alt={cw.courseTitle}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="material-symbols-outlined text-primary text-[28px]">
+                            play_lesson
                           </span>
-                        </>
-                      )}
-                    </div>
-                    <h2 className="text-lg sm:text-2xl font-bold text-on-surface tracking-tight break-words">
-                      {dashboard.continueWatching.courseTitle}
-                    </h2>
-                    <p className="text-xs sm:text-sm text-on-surface-variant mt-1 break-words">
-                      <span className="text-secondary font-medium">
-                        {dashboard.continueWatching.moduleTitle}:
-                      </span>{' '}
-                      {dashboard.continueWatching.lessonTitle}
-                    </p>
-                    {dashboard.continueWatching.instructorName && (
-                      <div className="flex items-center gap-3 mt-2 text-xs text-outline font-mono">
-                        <span>Instrutor: {dashboard.continueWatching.instructorName}</span>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-4 w-full sm:w-auto shrink-0">
-                    <Link
-                      href={`/courses/${dashboard.continueWatching.courseId}?lesson=${dashboard.continueWatching.lessonId}`}
-                      className="w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-sm transition-all shadow-md"
-                    >
-                      <span
-                        className="material-symbols-outlined text-[20px]"
-                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="text-[10px] sm:text-xs font-mono text-secondary font-semibold uppercase tracking-wider">
+                            Continue de onde parou
+                          </span>
+                          {cw.totalCourseSeconds > 0 && (
+                            <span className="hidden sm:inline text-[11px] font-mono text-outline">
+                              · {formatWatchTime(cw.watchedCourseSeconds)} de{' '}
+                              {formatWatchTime(cw.totalCourseSeconds)}
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-base sm:text-2xl font-bold text-on-surface tracking-tight line-clamp-1">
+                          {cw.courseTitle}
+                        </h2>
+                        <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 line-clamp-1">
+                          <span className="text-secondary/90 font-medium">{cw.moduleTitle}:</span>{' '}
+                          {cw.lessonTitle}
+                        </p>
+                        <div className="flex items-center gap-2.5 mt-2.5 max-w-md">
+                          <div className="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-primary-container to-secondary"
+                              style={{ width: `${cwPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-mono text-outline shrink-0">
+                            {cwPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 w-full lg:w-auto shrink-0">
+                      <Link
+                        href={`/courses/${cw.courseId}?lesson=${cw.lessonId}`}
+                        className="flex-1 lg:flex-none justify-center flex items-center gap-2 px-5 py-2.5 sm:py-3 rounded-xl bg-primary-container hover:bg-secondary-container text-on-primary-container font-semibold text-xs sm:text-sm transition-all shadow-md"
                       >
-                        play_arrow
-                      </span>
-                      <span>Continuar aula</span>
-                    </Link>
+                        <span
+                          className="material-symbols-outlined text-[18px] sm:text-[20px]"
+                          style={{ fontVariationSettings: "'FILL' 1" }}
+                        >
+                          play_arrow
+                        </span>
+                        <span>Continuar curso</span>
+                      </Link>
+                      <Link
+                        href={`/courses/${cw.courseId}`}
+                        className="px-3.5 py-2.5 sm:py-3 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-on-surface-variant text-xs sm:text-sm font-medium transition-colors shrink-0"
+                      >
+                        Ver aulas
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              </section>
-            )}
+                </section>
+              );
+            })()}
 
             {/* Busca Mobile */}
             <div className="sm:hidden mb-4">
