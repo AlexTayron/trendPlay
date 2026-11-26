@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import type { CourseDetail, LessonDetail, LessonNote } from '@devcore/shared';
+import type { CourseDetail, LessonDetail, LessonNote, LessonResource } from '@devcore/shared';
 import {
   attachDriveFiles,
   createLessonNote,
@@ -19,6 +19,11 @@ import {
 import { openDriveFilesPicker } from '../../../lib/google-picker';
 import { DriveFileBrowserModal } from '../../../components/DriveFileBrowserModal';
 import { CourseTutorPanel } from '../../../components/CourseTutorPanel';
+import {
+  MaterialPreviewPanel,
+  getMaterialKindMeta,
+  getMaterialPreviewKind,
+} from '../../../components/MaterialPreviewPanel';
 import {
   YouTubeLessonPlayer,
   type YouTubePlayerHandle,
@@ -169,6 +174,7 @@ function CoursePlayerContent() {
   const [notes, setNotes] = useState<LessonNote[]>([]);
   const [noteInput, setNoteInput] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [previewResource, setPreviewResource] = useState<LessonResource | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -395,6 +401,7 @@ function CoursePlayerContent() {
     setCurrentTime(0);
     setLiveDuration(0);
     setAutoPlayCountdown(null);
+    setPreviewResource(null);
 
     getLessonNotes(activeLessonId)
       .then(setNotes)
@@ -1602,50 +1609,162 @@ function CoursePlayerContent() {
                 </div>
               </div>
 
-              {/* Materiais de Apoio da Aula */}
+              {/* Materiais de Apoio da Aula (com leitor lateral para PDF/Word/Imagem no desktop ao clicar) */}
               {activeLesson.resources.length > 0 && (
                 <div
                   className={`${
                     !theaterMode && mobileTab === 'notes' ? 'block' : 'hidden lg:block'
                   } rounded-2xl bg-surface-container-low border border-outline-variant/25 p-4 sm:p-5`}
                 >
-                  <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-secondary text-[18px]">
-                      attach_file
-                    </span>
-                    <span>Materiais de apoio ({activeLesson.resources.length})</span>
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {activeLesson.resources.map((res) => (
-                      <a
-                        key={res.id}
-                        href={getDriveStreamUrl(res.driveFileId)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/20 transition-colors"
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-secondary text-[18px]">
+                        attach_file
+                      </span>
+                      <span>Materiais de apoio ({activeLesson.resources.length})</span>
+                    </h3>
+                    {previewResource && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewResource(null)}
+                        className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-[11px] text-on-surface-variant border border-outline-variant/25 transition-colors"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="material-symbols-outlined text-primary text-[20px]">
-                            {res.role === 'code'
-                              ? 'code'
-                              : res.role === 'transcript'
-                                ? 'subtitles'
-                                : 'description'}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-on-surface truncate">
-                              {res.title}
-                            </div>
-                            <div className="text-[10px] font-mono text-outline uppercase">
-                              {res.role} · {formatBytes(res.byteSize)}
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                          close
+                        </span>
+                        <span>Fechar leitor</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    className={
+                      previewResource
+                        ? 'grid grid-cols-1 lg:grid-cols-12 gap-4 items-start'
+                        : ''
+                    }
+                  >
+                    <div
+                      className={
+                        previewResource
+                          ? 'lg:col-span-4 grid grid-cols-1 gap-2.5 lg:max-h-[620px] lg:overflow-y-auto lg:pr-1'
+                          : 'grid grid-cols-1 sm:grid-cols-2 gap-3'
+                      }
+                    >
+                      {activeLesson.resources.map((res) => {
+                        const meta = getMaterialKindMeta(res);
+                        const canPreview = getMaterialPreviewKind(res) !== null;
+                        const isSelected = previewResource?.id === res.id;
+
+                        return (
+                          <div
+                            key={res.id}
+                            className={`flex items-center justify-between gap-2 p-3 rounded-xl border transition-all ${
+                              isSelected
+                                ? 'bg-primary/15 border-primary/50 shadow-md'
+                                : 'bg-surface-container hover:bg-surface-container-high border-outline-variant/20'
+                            }`}
+                          >
+                            <a
+                              href={getDriveStreamUrl(res.driveFileId)}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => {
+                                if (
+                                  canPreview &&
+                                  typeof window !== 'undefined' &&
+                                  window.innerWidth >= 1024
+                                ) {
+                                  e.preventDefault();
+                                  setPreviewResource((prev) => (prev?.id === res.id ? null : res));
+                                }
+                              }}
+                              className="flex items-center gap-2.5 min-w-0 flex-1"
+                            >
+                              <span
+                                className={`material-symbols-outlined text-[20px] shrink-0 ${
+                                  isSelected ? 'text-secondary' : 'text-primary'
+                                }`}
+                              >
+                                {meta.icon}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="text-xs font-semibold text-on-surface truncate">
+                                  {res.title}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-outline uppercase">
+                                  <span
+                                    className={
+                                      canPreview
+                                        ? 'text-secondary font-semibold'
+                                        : undefined
+                                    }
+                                  >
+                                    {meta.label}
+                                  </span>
+                                  <span>·</span>
+                                  <span>{formatBytes(res.byteSize)}</span>
+                                </div>
+                              </div>
+                            </a>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {canPreview && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPreviewResource((prev) =>
+                                      prev?.id === res.id ? null : res,
+                                    )
+                                  }
+                                  title={
+                                    isSelected
+                                      ? 'Fechar visualização ao lado'
+                                      : 'Visualizar ao lado'
+                                  }
+                                  className={`hidden lg:flex p-1.5 rounded-lg transition-colors ${
+                                    isSelected
+                                      ? 'bg-secondary/20 text-secondary'
+                                      : 'hover:bg-white/10 text-on-surface-variant hover:text-secondary'
+                                  }`}
+                                >
+                                  <span
+                                    className="material-symbols-outlined"
+                                    style={{ fontSize: '16px' }}
+                                  >
+                                    {isSelected ? 'visibility_off' : 'visibility'}
+                                  </span>
+                                </button>
+                              )}
+                              <a
+                                href={getDriveStreamUrl(res.driveFileId)}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Abrir em nova aba"
+                                className="p-1.5 rounded-lg hover:bg-white/10 text-outline hover:text-on-surface transition-colors"
+                              >
+                                <span
+                                  className="material-symbols-outlined"
+                                  style={{ fontSize: '16px' }}
+                                >
+                                  open_in_new
+                                </span>
+                              </a>
                             </div>
                           </div>
-                        </div>
-                        <span className="material-symbols-outlined text-[16px] text-outline">
-                          open_in_new
-                        </span>
-                      </a>
-                    ))}
+                        );
+                      })}
+                    </div>
+
+                    {/* Leitor lateral de PDF / Word / Imagem (apenas Web/Desktop, aberto somente ao clicar) */}
+                    {previewResource && (
+                      <div className="hidden lg:block lg:col-span-8 min-w-0">
+                        <MaterialPreviewPanel
+                          resource={previewResource}
+                          onClose={() => setPreviewResource(null)}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

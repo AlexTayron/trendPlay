@@ -139,8 +139,29 @@ function classifyDriveItem(mimeType: string, name: string): FileCategory {
     mimeType === 'application/vnd.google-apps.document' ||
     mimeType === 'application/vnd.google-apps.presentation' ||
     mimeType === 'application/vnd.google-apps.spreadsheet' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/msword' ||
+    mimeType.startsWith('image/') ||
     mimeType.startsWith('text/') ||
-    ['pdf', 'md', 'markdown', 'txt', 'doc', 'docx', 'ppt', 'pptx', 'zip', 'epub'].includes(ext)
+    [
+      'pdf',
+      'md',
+      'markdown',
+      'txt',
+      'doc',
+      'docx',
+      'ppt',
+      'pptx',
+      'zip',
+      'epub',
+      'png',
+      'jpg',
+      'jpeg',
+      'webp',
+      'gif',
+      'svg',
+      'bmp',
+    ].includes(ext)
   ) {
     return 'document';
   }
